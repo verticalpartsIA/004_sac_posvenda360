@@ -592,8 +592,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           sla_hours: input.slaHours,
           whatsapp_thread_id: input.whatsappThreadId ?? null,
           acao_contencao: denormalizeContainmentActions(input.acaoContencao),
-          created_by: input.emitente ?? currentUser,
-          assigned_to: currentUser,
+          created_by: user?.id ?? null,
+          assigned_to: user?.id ?? null,
         })
         .select("*")
         .single();
@@ -744,7 +744,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             linked_occurrence_id: input.linkedOccurrenceId ?? null,
             linked_customer: input.linkedCustomer ?? null,
             sla_hours: input.slaHours,
-            opened_by: currentUser,
+            opened_by: user?.id ?? null,
           })
           .select("id")
           .single();
