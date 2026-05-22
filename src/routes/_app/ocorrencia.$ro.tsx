@@ -13,7 +13,7 @@ import {
 } from "@/lib/types";
 import { StatusBadge, PriorityBadge } from "@/components/app/StatusBadge";
 import { SlaBar } from "@/components/app/SlaBar";
-import { ArrowLeft, ShieldCheck, Clock, User, MessageCircle, FileEdit, Star, AlertTriangle, Users, Plus } from "lucide-react";
+import { ArrowLeft, ShieldCheck, Clock, User, MessageCircle, FileEdit, Star, AlertTriangle, Users, Plus, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/_app/ocorrencia/$ro")({ component: TicketDetail });
@@ -21,8 +21,16 @@ export const Route = createFileRoute("/_app/ocorrencia/$ro")({ component: Ticket
 function TicketDetail() {
   const { ro } = Route.useParams();
   const router = useRouter();
-  const { tickets, internalTickets, updateStatus, resolveTicket, setNps, createInternalTicket } = useStore();
+  const { tickets, internalTickets, storeReady, updateStatus, resolveTicket, setNps, createInternalTicket } = useStore();
   const ticket = tickets.find((t) => t.code === ro || t.id === ro);
+
+  if (!storeReady) {
+    return (
+      <div className="flex items-center justify-center py-32">
+        <RefreshCw className="h-6 w-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
 
   if (!ticket) {
     return (

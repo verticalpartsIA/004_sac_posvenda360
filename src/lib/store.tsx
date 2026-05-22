@@ -480,6 +480,7 @@ interface StoreCtx {
   tickets: Ticket[];
   internalTickets: InternalTicket[];
   npsRecords: NpsRecord[];
+  storeReady: boolean;
   currentUser: string;
   createTicket: (i: NewTicketInput) => Promise<Ticket>;
   updateStatus: (id: string, status: TicketStatus) => void;
@@ -500,6 +501,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [internalTickets, setInternalTickets] = useState<InternalTicket[]>([]);
   const [npsRecords, setNpsRecords] = useState<NpsRecord[]>([]);
+  const [storeReady, setStoreReady] = useState(false);
 
   const loadAll = useCallback(async () => {
     const [ticketsRes, internalRes, messagesRes, auditsRes, npsRes] = await Promise.all([
@@ -540,6 +542,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setTickets(mappedTickets);
     setInternalTickets(mappedInternalTickets);
     setNpsRecords(npsRows.map(mapNpsRecord));
+    setStoreReady(true);
   }, []);
 
   useEffect(() => {
@@ -613,18 +616,26 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const updateStatus = useCallback<StoreCtx["updateStatus"]>(
     (id, status) => {
-      setTickets((prev) =>
-        prev.map((ticket) => (ticket.id === id ? { ...ticket, status, updatedAt: now() } : ticket)),
+      const prev = tickets.find((t) => t.id === id)?.status;
+
+      setTickets((ts) =>
+        ts.map((ticket) => (ticket.id === id ? { ...ticket, status, updatedAt: now() } : ticket)),
       );
 
       void (async () => {
         const { error } = await supabase
           .from("tickets")
-          .update({ status: denormalizeTicketStatus(status), updated_at: now() })
+          .update({ status: denormalizeTicketStatus(status) })
           .eq("id", id);
 
         if (error) {
           console.error("[Store] Failed to update ticket status", error);
+          // rollback optimistic update
+          if (prev !== undefined) {
+            setTickets((ts) =>
+              ts.map((ticket) => (ticket.id === id ? { ...ticket, status: prev, updatedAt: now() } : ticket)),
+            );
+          }
           return;
         }
 
@@ -634,7 +645,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         await loadAll();
       })();
     },
-    [loadAll, writeAudit],
+    [loadAll, tickets, writeAudit],
   );
 
   const resolveTicket = useCallback<StoreCtx["resolveTicket"]>(
@@ -965,6 +976,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         tickets,
         internalTickets,
         npsRecords,
+        storeReady,
         currentUser,
         createTicket,
         updateStatus,

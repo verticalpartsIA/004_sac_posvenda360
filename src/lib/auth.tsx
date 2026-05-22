@@ -54,7 +54,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signIn: AuthCtx["signIn"] = async (email, password) => {
     const { error } = await supabase.auth.signInWithPassword({ email, password });
-    return { error: error?.message ?? null };
+    if (!error) return { error: null };
+    const AUTH_ERRORS: Record<string, string> = {
+      "Invalid login credentials": "E-mail ou senha incorretos.",
+      "Email not confirmed": "E-mail não confirmado. Verifique sua caixa de entrada.",
+      "User not found": "Usuário não encontrado.",
+      "Too many requests": "Muitas tentativas. Aguarde alguns minutos.",
+      "Email rate limit exceeded": "Limite de tentativas excedido. Tente novamente mais tarde.",
+    };
+    return { error: AUTH_ERRORS[error.message] ?? "Erro ao fazer login. Tente novamente." };
   };
   const signUp: AuthCtx["signUp"] = async (email, password, displayName) => {
     const { error } = await supabase.auth.signUp({
