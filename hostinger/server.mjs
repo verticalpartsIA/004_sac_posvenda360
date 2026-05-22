@@ -406,6 +406,117 @@ function toBody(req) {
   return Readable.toWeb(req);
 }
 
+// ─── /api/whatsapp/start ──────────────────────────────────────────────────────
+// Inicia nova conversa WhatsApp: envia mensagem + cria ticket + salva em whatsapp_messages.
+// Body: { phone: string, text: string, customerName?: string }
+
+async function handleWhatsappStart(req, res) {
+  const json = (status, obj) => {
+    res.statusCode = status;
+    res.setHeader("Content-Type", "application/json");
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.end(JSON.stringify(obj));
+  };
+
+  if (req.method === "OPTIONS") {
+    res.statusCode = 204;
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+    return res.end();
+  }
+
+  if (req.method !== "POST") return json(405, { error: "Method Not Allowed" });
+
+  let payload;
+  try { payload = JSON.parse(await readBody(req)); }
+  catch { return json(400, { error: "JSON inválido." }); }
+
+  const { phone: rawPhone, text, customerName } = payload || {};
+  if (!rawPhone || !text?.trim()) {
+    return json(422, { error: "phone e text são obrigatórios" });
+  }
+
+  const phone = String(rawPhone).replace(/\D/g, "");
+  if (phone.length < 10) {
+    return json(422, { error: "Número inválido — use DDI+DDD+número (ex: 5511999999999)" });
+  }
+
+  const remoteJid = `${phone}@s.whatsapp.net`;
+  const customer = customerName?.trim() ? `${customerName.trim()} (${phone})` : phone;
+
+  // 1. Envia via Evolution API
+  let evResult = {};
+  try {
+    const r = await fetch(`http://72.61.48.156:8080/message/sendText/pv360`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", apikey: WH_APIKEY() },
+      body: JSON.stringify({ number: phone, text: text.trim() }),
+    });
+    evResult = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      const detail = evResult?.message ?? evResult?.error ?? `HTTP ${r.status}`;
+      console.error("[start] Evolution error:", evResult);
+      return json(502, { error: `Evolution API: ${detail}` });
+    }
+  } catch (e) {
+    return json(503, { error: `Falha ao conectar na Evolution API: ${e.message}` });
+  }
+
+  const sbKey = SB_SERVICE_KEY();
+  const headers = {
+    "Content-Type": "application/json",
+    "apikey": sbKey,
+    "Authorization": `Bearer ${sbKey}`,
+    "Prefer": "return=representation",
+  };
+
+  // 2. Cria ticket
+  let ticketId = null;
+  try {
+    const r = await fetch(`${SB_URL}/rest/v1/tickets`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        customer,
+        part: "A definir",
+        part_code: "WA",
+        reason: "Contato iniciado pela plataforma",
+        occurrence_reason: "outro",
+        channel: "whatsapp",
+        status: "aberto",
+        whatsapp_thread_id: remoteJid,
+      }),
+    });
+    if (r.ok) {
+      const rows = await r.json();
+      ticketId = Array.isArray(rows) ? rows[0]?.id : rows?.id;
+    } else {
+      console.error("[start] ticket error:", await r.text());
+    }
+  } catch (e) { console.error("[start] ticket exception:", e.message); }
+
+  // 3. Salva mensagem
+  const msgKey = evResult?.key;
+  try {
+    await fetch(`${SB_URL}/rest/v1/whatsapp_messages`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        instance: "pv360",
+        remote_jid: remoteJid,
+        from_me: true,
+        body: text.trim(),
+        message_id: msgKey?.id ?? null,
+        ticket_id: ticketId,
+        raw: evResult,
+      }),
+    });
+  } catch (e) { console.error("[start] message save exception:", e.message); }
+
+  return json(200, { ok: true, remoteJid, ticketId });
+}
+
 // ─── /api/whatsapp/send ────────────────────────────────────────────────────────
 // Envia mensagem de texto via Evolution API e salva em whatsapp_messages.
 // Body: { remoteJid: string, text: string }
@@ -575,6 +686,10 @@ const server = http.createServer(async (req, res) => {
     }
     if (urlPath === "/api/whatsapp/send") {
       await handleWhatsappSend(req, res);
+      return;
+    }
+    if (urlPath === "/api/whatsapp/start") {
+      await handleWhatsappStart(req, res);
       return;
     }
 
