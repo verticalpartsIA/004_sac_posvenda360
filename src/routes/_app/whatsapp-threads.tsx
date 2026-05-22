@@ -1,14 +1,14 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
-import { MessageCircle, Search, RefreshCw, Wifi, WifiOff } from "lucide-react";
+import { MessageCircle, Search, RefreshCw, Wifi, WifiOff, Plus, X, Send } from "lucide-react";
 
 export const Route = createFileRoute("/_app/whatsapp-threads")({
   component: WhatsappThreads,
 });
 
-// ─── tipos ────────────────────────────────────────────────────────────────────
+// tipos
 type WaMsg = {
   id: string;
   remote_jid: string;
@@ -26,10 +26,10 @@ type Thread = {
   lastAt: string;
   fromMe: boolean;
   ticketId: string | null;
-  unread: number; // mensagens recebidas na última hora
+  unread: number;
 };
 
-// ─── helpers ──────────────────────────────────────────────────────────────────
+// helpers
 function jidToPhone(jid: string) {
   return jid.replace("@s.whatsapp.net", "").replace("@lid", "").replace("@c.us", "");
 }
@@ -59,9 +59,8 @@ function relativeTime(iso: string) {
 
 function toThreads(rows: WaMsg[]): Thread[] {
   const map = new Map<string, Thread>();
-  const cutoff = Date.now() - 3600_000; // última hora
+  const cutoff = Date.now() - 3600_000;
 
-  // rows já vêm ordenadas por created_at desc
   for (const r of rows) {
     if (!map.has(r.remote_jid)) {
       map.set(r.remote_jid, {
@@ -85,12 +84,145 @@ function toThreads(rows: WaMsg[]): Thread[] {
   );
 }
 
-// ─── componente ───────────────────────────────────────────────────────────────
+// componente modal nova conversa
+function NovaConversaModal({
+  onClose,
+  onSuccess,
+}: {
+  onClose: () => void;
+  onSuccess: (remoteJid: string) => void;
+}) {
+  const [phone, setPhone] = useState("");
+  const [name, setName] = useState("");
+  const [msg, setMsg] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function submit() {
+    const cleanPhone = phone.replace(/\D/g, "");
+    if (!cleanPhone || !msg.trim()) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const r = await fetch("/api/whatsapp/start", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone: cleanPhone, text: msg.trim(), customerName: name.trim() || undefined }),
+      });
+      if (!r.ok) {
+        const e = await r.json().catch(() => ({}));
+        throw new Error((e as { error?: string }).error ?? "Erro ao iniciar conversa");
+      }
+      const result = (await r.json()) as { remoteJid: string };
+      onSuccess(result.remoteJid);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Erro ao iniciar conversa");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function handleKey(e: React.KeyboardEvent) {
+    if (e.key === "Escape") onClose();
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm"
+      onKeyDown={handleKey}
+    >
+      <div className="w-full max-w-md rounded-xl border bg-card p-6 shadow-2xl mx-4">
+        <div className="flex items-center justify-between mb-5">
+          <h2 className="text-lg font-semibold">Nova conversa</h2>
+          <button
+            onClick={onClose}
+            className="rounded-lg p-1.5 text-muted-foreground hover:bg-muted"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div className="space-y-4">
+          <div>
+            <label className="text-sm font-medium">Numero WhatsApp *</label>
+            <input
+              className="mt-1 w-full rounded-lg border bg-muted/40 px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ring placeholder:text-muted-foreground"
+              placeholder="5511999999999 (DDI + DDD + numero)"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              autoFocus
+            />
+            <p className="mt-1 text-[11px] text-muted-foreground">
+              Inclua o codigo do pais (55 para Brasil) e DDD, sem espacos ou tracos.
+            </p>
+          </div>
+
+          <div>
+            <label className="text-sm font-medium">Nome do contato</label>
+            <input
+              className="mt-1 w-full rounded-lg border bg-muted/40 px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ring placeholder:text-muted-foreground"
+              placeholder="Ex: Joao Silva (opcional)"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+            />
+          </div>
+
+          <div>
+            <label className="text-sm font-medium">Primeira mensagem *</label>
+            <textarea
+              rows={3}
+              className="mt-1 w-full resize-none rounded-lg border bg-muted/40 px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ring placeholder:text-muted-foreground"
+              placeholder="Digite a mensagem inicial..."
+              value={msg}
+              onChange={(e) => setMsg(e.target.value)}
+            />
+          </div>
+
+          {error && (
+            <p className="rounded-md bg-destructive/10 px-3 py-2 text-xs text-destructive">
+              {error}
+            </p>
+          )}
+
+          <div className="flex gap-2 pt-1">
+            <button
+              onClick={onClose}
+              className="flex-1 rounded-lg border px-4 py-2 text-sm hover:bg-muted transition-colors"
+            >
+              Cancelar
+            </button>
+            <button
+              onClick={submit}
+              disabled={!phone.trim() || !msg.trim() || busy}
+              className={cn(
+                "flex-1 inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium text-white transition-colors",
+                phone.trim() && msg.trim() && !busy
+                  ? "bg-emerald-600 hover:bg-emerald-700"
+                  : "bg-muted text-muted-foreground cursor-not-allowed",
+              )}
+            >
+              {busy ? (
+                <RefreshCw className="h-4 w-4 animate-spin" />
+              ) : (
+                <Send className="h-4 w-4" />
+              )}
+              {busy ? "Enviando..." : "Iniciar conversa"}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// componente principal
 function WhatsappThreads() {
+  const navigate = useNavigate();
   const [threads, setThreads] = useState<Thread[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [online, setOnline] = useState(true);
+  const [showModal, setShowModal] = useState(false);
 
   async function load() {
     const { data, error } = await (supabase as any)
@@ -112,7 +244,7 @@ function WhatsappThreads() {
 
   useEffect(() => {
     load();
-    const id = setInterval(load, 10_000); // polling a cada 10s
+    const id = setInterval(load, 10_000);
     return () => clearInterval(id);
   }, []);
 
@@ -131,10 +263,10 @@ function WhatsappThreads() {
       {/* Header */}
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <p className="text-xs font-medium uppercase tracking-[0.18em] text-gold">Comunicação</p>
+          <p className="text-xs font-medium uppercase tracking-[0.18em] text-gold">Comunicacao</p>
           <h1 className="mt-1 text-2xl font-semibold sm:text-3xl">WhatsApp</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            {threads.length} conversa(s) · instância{" "}
+            {threads.length} conversa(s) · instancia{" "}
             <span className="font-mono text-xs">pv360</span>
             {online ? (
               <span className="ml-2 inline-flex items-center gap-1 text-emerald-500">
@@ -147,12 +279,20 @@ function WhatsappThreads() {
             )}
           </p>
         </div>
-        <button
-          onClick={load}
-          className="inline-flex items-center gap-2 rounded-md border border-input bg-card px-3 py-2 text-sm hover:bg-muted"
-        >
-          <RefreshCw className="h-3.5 w-3.5" /> Atualizar
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowModal(true)}
+            className="inline-flex items-center gap-2 rounded-md bg-emerald-600 px-3 py-2 text-sm text-white hover:bg-emerald-700 transition-colors"
+          >
+            <Plus className="h-3.5 w-3.5" /> Nova conversa
+          </button>
+          <button
+            onClick={load}
+            className="inline-flex items-center gap-2 rounded-md border border-input bg-card px-3 py-2 text-sm hover:bg-muted"
+          >
+            <RefreshCw className="h-3.5 w-3.5" /> Atualizar
+          </button>
+        </div>
       </div>
 
       {/* Search */}
@@ -160,7 +300,7 @@ function WhatsappThreads() {
         <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
         <input
           className="w-full rounded-lg border bg-card py-2 pl-9 pr-4 text-sm outline-none placeholder:text-muted-foreground focus:ring-1 focus:ring-ring"
-          placeholder="Buscar por nome ou número..."
+          placeholder="Buscar por nome ou numero..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
@@ -176,8 +316,14 @@ function WhatsappThreads() {
           <MessageCircle className="h-10 w-10 text-muted-foreground/40" />
           <p className="mt-3 text-sm font-medium">Nenhuma conversa ainda</p>
           <p className="mt-1 text-xs text-muted-foreground">
-            Mensagens recebidas no número conectado aparecerão aqui.
+            Mensagens recebidas ou iniciadas aparecerão aqui.
           </p>
+          <button
+            onClick={() => setShowModal(true)}
+            className="mt-4 inline-flex items-center gap-2 rounded-md bg-emerald-600 px-4 py-2 text-sm text-white hover:bg-emerald-700 transition-colors"
+          >
+            <Plus className="h-3.5 w-3.5" /> Iniciar conversa
+          </button>
         </div>
       ) : (
         <div className="overflow-hidden rounded-xl border bg-card shadow-[var(--shadow-elegant)]">
@@ -213,7 +359,7 @@ function WhatsappThreads() {
                       </div>
                       <div className="mt-0.5 flex items-center gap-1.5">
                         {t.fromMe && (
-                          <span className="text-[11px] text-muted-foreground">Você:</span>
+                          <span className="text-[11px] text-muted-foreground">Voce:</span>
                         )}
                         <p className="truncate text-sm text-muted-foreground">{t.lastBody}</p>
                       </div>
@@ -239,6 +385,17 @@ function WhatsappThreads() {
             })}
           </ul>
         </div>
+      )}
+
+      {/* Modal nova conversa */}
+      {showModal && (
+        <NovaConversaModal
+          onClose={() => setShowModal(false)}
+          onSuccess={(remoteJid) => {
+            setShowModal(false);
+            navigate({ to: "/thread/$id", params: { id: remoteJid } });
+          }}
+        />
       )}
     </div>
   );
