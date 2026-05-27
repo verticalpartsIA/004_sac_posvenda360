@@ -54,16 +54,28 @@ export const APIRoute = createAPIFileRoute("/api/whatsapp/send")({
 
     const msgKey = evResult?.key as Record<string, unknown> | undefined;
     const sb = getSb();
+
+    // Busca o ticket aberto vinculado a este remoteJid para linkar a mensagem
+    const { data: linked } = await sb
+      .from("tickets")
+      .select("id")
+      .eq("whatsapp_thread_id", remoteJid)
+      .in("status", ["aberto", "em_atendimento", "aguardando_cliente", "aguardando_interno"])
+      .order("created_at", { ascending: false })
+      .limit(1);
+    const ticketId = linked?.[0]?.id ?? null;
+
     const { error: dbErr } = await sb.from("whatsapp_messages").insert({
       instance: EVO_INSTANCE,
       remote_jid: remoteJid,
       from_me: true,
       body: text,
       message_id: (msgKey?.id as string) ?? null,
+      ticket_id: ticketId,
       raw: evResult,
     });
     if (dbErr) console.error("[api/whatsapp/send] db error:", dbErr.message);
 
-    return Response.json({ ok: true });
+    return Response.json({ ok: true, ticketId });
   },
 });

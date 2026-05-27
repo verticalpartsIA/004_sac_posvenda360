@@ -1,6 +1,7 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import type { Database } from "@/integrations/supabase/types";
 import { cn } from "@/lib/utils";
 import { MessageCircle, Search, RefreshCw, Wifi, WifiOff, Plus, X, Send } from "lucide-react";
 
@@ -9,15 +10,7 @@ export const Route = createFileRoute("/_app/whatsapp-threads")({
 });
 
 // tipos
-type WaMsg = {
-  id: string;
-  remote_jid: string;
-  push_name: string | null;
-  body: string;
-  from_me: boolean;
-  ticket_id: string | null;
-  created_at: string;
-};
+type WaMsg = Database["public"]["Tables"]["whatsapp_messages"]["Row"];
 
 type Thread = {
   remoteJid: string;
@@ -223,11 +216,12 @@ function WhatsappThreads() {
   const [search, setSearch] = useState("");
   const [online, setOnline] = useState(true);
   const [showModal, setShowModal] = useState(false);
+  const msgsRef = useRef<WaMsg[]>([]);
 
   async function load() {
-    const { data, error } = await (supabase as any)
+    const { data, error } = await supabase
       .from("whatsapp_messages")
-      .select("id,remote_jid,push_name,body,from_me,ticket_id,created_at")
+      .select("id,remote_jid,push_name,body,from_me,ticket_id,created_at,instance,message_id,media_type,media_url,raw")
       .order("created_at", { ascending: false })
       .limit(500);
 
@@ -238,14 +232,32 @@ function WhatsappThreads() {
       return;
     }
     setOnline(true);
-    setThreads(toThreads((data as WaMsg[]) ?? []));
+    msgsRef.current = (data as WaMsg[]) ?? [];
+    setThreads(toThreads(msgsRef.current));
     setLoading(false);
   }
 
   useEffect(() => {
     load();
-    const id = setInterval(load, 10_000);
-    return () => clearInterval(id);
+
+    // Realtime: qualquer INSERT na tabela atualiza a lista instantaneamente
+    const channel = supabase
+      .channel("wa-threads-realtime")
+      .on<WaMsg>(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "whatsapp_messages" },
+        (payload) => {
+          setOnline(true);
+          msgsRef.current = [payload.new, ...msgsRef.current].slice(0, 500);
+          setThreads(toThreads(msgsRef.current));
+        },
+      )
+      .subscribe((status) => {
+        if (status === "SUBSCRIBED") setOnline(true);
+        if (status === "CLOSED" || status === "CHANNEL_ERROR") setOnline(false);
+      });
+
+    return () => { supabase.removeChannel(channel); };
   }, []);
 
   const filtered = threads.filter((t) => {

@@ -52,15 +52,26 @@ export const sendWhatsappMessage = createServerFn()
       throw new Error(e instanceof Error ? e.message : "Erro ao enviar mensagem");
     }
 
-    // 2. Salva em whatsapp_messages (from_me = true)
+    // 2. Salva em whatsapp_messages (from_me = true) — com ticket_id vinculado
     const msgKey = evResult?.key as Record<string, unknown> | undefined;
     const sb = getSb();
+
+    const { data: linked } = await sb
+      .from("tickets")
+      .select("id")
+      .eq("whatsapp_thread_id", data.remoteJid)
+      .in("status", ["aberto", "em_atendimento", "aguardando_cliente", "aguardando_interno"])
+      .order("created_at", { ascending: false })
+      .limit(1);
+    const ticketId = linked?.[0]?.id ?? null;
+
     const { error } = await sb.from("whatsapp_messages").insert({
       instance: EVO_INSTANCE,
       remote_jid: data.remoteJid,
       from_me: true,
       body: data.text,
       message_id: (msgKey?.id as string) ?? null,
+      ticket_id: ticketId,
       raw: evResult,
     });
     if (error) console.error("[wa-server] insert error:", error.message);

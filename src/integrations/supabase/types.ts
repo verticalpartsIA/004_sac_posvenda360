@@ -595,6 +595,59 @@ export type Database = {
         }
         Relationships: []
       }
+      whatsapp_messages: {
+        Row: {
+          id: string
+          instance: string
+          remote_jid: string
+          push_name: string | null
+          from_me: boolean
+          message_id: string | null
+          body: string
+          media_type: string | null
+          media_url: string | null
+          ticket_id: string | null
+          raw: Json | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          instance?: string
+          remote_jid: string
+          push_name?: string | null
+          from_me?: boolean
+          message_id?: string | null
+          body: string
+          media_type?: string | null
+          media_url?: string | null
+          ticket_id?: string | null
+          raw?: Json | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          instance?: string
+          remote_jid?: string
+          push_name?: string | null
+          from_me?: boolean
+          message_id?: string | null
+          body?: string
+          media_type?: string | null
+          media_url?: string | null
+          ticket_id?: string | null
+          raw?: Json | null
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_messages_ticket_id_fkey"
+            columns: ["ticket_id"]
+            isOneToOne: false
+            referencedRelation: "tickets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
