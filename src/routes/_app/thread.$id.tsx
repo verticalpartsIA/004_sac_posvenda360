@@ -196,7 +196,10 @@ function ThreadView() {
         <div className="min-w-0 flex-1">
           <p className="truncate font-semibold leading-tight">{contactName}</p>
           <p className="flex items-center gap-1 text-[11px] text-muted-foreground">
-            <Phone className="h-3 w-3" /> {phone}
+            <Phone className="h-3 w-3" />
+            {remoteJid.endsWith("@lid")
+              ? <span className="italic text-amber-500">contato @lid (número oculto pelo WhatsApp)</span>
+              : phone}
           </p>
         </div>
 
