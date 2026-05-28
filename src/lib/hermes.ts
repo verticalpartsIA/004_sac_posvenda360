@@ -130,9 +130,13 @@ export async function autoReplyWithHermes(params: {
   // Não responde mídia pura (sem texto)
   if (MEDIA_ONLY.has(body.toLowerCase())) return;
 
-  // @lid = identificador anônimo do WhatsApp (usuários via widget do site)
-  // Para esses contatos: busca histórico pelo remoteJid completo e envia com o JID completo
+  // @lid = contatos com privacidade avançada do WhatsApp (9% dos contatos)
+  // Evolution API não consegue enviar para @lid — ticket é criado para atendimento humano
   const isLid = remoteJid.endsWith("@lid");
+  if (isLid) {
+    console.log(`[hermes] ⚠️ contato @lid (${remoteJid}) — auto-reply não suportado pela Evolution API. Ticket criado para equipe.`);
+    return;
+  }
   const phone = remoteJid
     .replace("@s.whatsapp.net", "")
     .replace("@lid", "")
