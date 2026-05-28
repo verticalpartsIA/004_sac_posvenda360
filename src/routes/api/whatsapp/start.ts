@@ -29,8 +29,12 @@ export const APIRoute = createAPIFileRoute("/api/whatsapp/start")({
       return Response.json({ error: "phone e text sao obrigatorios" }, { status: 422 });
     }
 
-    const phone = rawPhone.replace(/\D/g, "");
-    if (phone.length < 10) {
+    let phone = rawPhone.replace(/\D/g, "");
+    // Auto-adiciona DDI 55 (Brasil) se o número tiver só DDD+número (10 ou 11 dígitos)
+    if ((phone.length === 10 || phone.length === 11) && !phone.startsWith("55")) {
+      phone = "55" + phone;
+    }
+    if (phone.length < 12 || phone.length > 13) {
       return Response.json({ error: "Numero invalido — use DDI+DDD+numero (ex: 5511999999999)" }, { status: 422 });
     }
 
