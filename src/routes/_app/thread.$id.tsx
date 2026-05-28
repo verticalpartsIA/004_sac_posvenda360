@@ -10,6 +10,8 @@ import {
   Phone,
   ExternalLink,
   CheckCheck,
+  Pencil,
+  Check,
 } from "lucide-react";
 
 export const Route = createFileRoute("/_app/thread/$id")({ component: ThreadView });
@@ -72,6 +74,22 @@ function ThreadView() {
   const [sendError, setSendError] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  // ── override phone para @lid ───────────────────────────────────────────────
+  const isLid = remoteJid.endsWith("@lid");
+  const lidStorageKey = `lid-phone:${remoteJid}`;
+  const [overridePhone, setOverridePhone] = useState<string>(() =>
+    isLid ? (localStorage.getItem(lidStorageKey) ?? "") : "",
+  );
+  const [editingPhone, setEditingPhone] = useState(false);
+  const [phoneInput, setPhoneInput] = useState(overridePhone);
+
+  function savePhone() {
+    const clean = phoneInput.replace(/\D/g, "");
+    setOverridePhone(clean);
+    localStorage.setItem(lidStorageKey, clean);
+    setEditingPhone(false);
+  }
 
   const contactName =
     messages.find((m) => !m.from_me)?.push_name ?? jidToPhone(remoteJid);
@@ -152,7 +170,11 @@ function ThreadView() {
       const r = await fetch("/api/whatsapp/send", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ remoteJid, text: body }),
+        body: JSON.stringify({
+          remoteJid,
+          text: body,
+          ...(isLid && overridePhone ? { overridePhone } : {}),
+        }),
       });
       if (!r.ok) {
         const err = await r.json().catch(() => ({}));
@@ -301,17 +323,66 @@ function ThreadView() {
 
       {/* ── Input ──────────────────────────────────────────────────────────── */}
       <div className="border-t bg-card px-4 py-3">
-        {/* Aviso @lid — exibido acima do input, não substitui */}
-        {remoteJid.endsWith("@lid") && (
-          <div className="mb-2 flex items-start gap-2 rounded-lg border border-amber-500/20 bg-amber-500/8 px-3 py-2">
-            <span className="mt-px text-[11px] text-amber-600 dark:text-amber-400">⚠️</span>
-            <p className="text-[11px] leading-snug text-muted-foreground">
-              <span className="font-medium text-amber-600 dark:text-amber-400">Contato @lid</span>
-              {" "}— WhatsApp oculta o número. Mensagens salvas localmente{" "}
-              <span className="font-mono text-[10px]">(local)</span>, mas podem{" "}
-              <span className="font-medium">não ser entregues</span>. Para garantir entrega,
-              use o WhatsApp no <span className="font-mono font-medium">(11) 99766-3780</span>.
-            </p>
+        {/* Banner @lid com campo de número manual para garantir entrega */}
+        {isLid && (
+          <div className="mb-2 rounded-lg border border-amber-500/25 bg-amber-500/8 px-3 py-2">
+            {overridePhone && !editingPhone ? (
+              /* Número salvo — mostra com botão de editar */
+              <div className="flex items-center gap-2">
+                <Phone className="h-3.5 w-3.5 shrink-0 text-emerald-500" />
+                <span className="text-[11px] text-muted-foreground">
+                  Enviando para{" "}
+                  <span className="font-mono font-medium text-foreground">
+                    {overridePhone.replace(/^55(\d{2})(\d{5})(\d{4})$/, "($1) $2-$3")}
+                  </span>
+                </span>
+                <button
+                  onClick={() => { setPhoneInput(overridePhone); setEditingPhone(true); }}
+                  className="ml-auto rounded p-0.5 text-muted-foreground hover:text-foreground"
+                  title="Editar número"
+                >
+                  <Pencil className="h-3 w-3" />
+                </button>
+              </div>
+            ) : editingPhone ? (
+              /* Editando o número */
+              <div className="flex items-center gap-2">
+                <Phone className="h-3.5 w-3.5 shrink-0 text-amber-500" />
+                <input
+                  autoFocus
+                  type="tel"
+                  value={phoneInput}
+                  onChange={(e) => setPhoneInput(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") savePhone(); if (e.key === "Escape") setEditingPhone(false); }}
+                  placeholder="11999999999"
+                  className="flex-1 rounded border bg-background px-2 py-0.5 text-[11px] font-mono outline-none focus:ring-1 focus:ring-amber-400"
+                />
+                <button
+                  onClick={savePhone}
+                  disabled={!phoneInput.replace(/\D/g, "")}
+                  className="rounded bg-emerald-600 p-1 text-white disabled:opacity-40"
+                  title="Salvar"
+                >
+                  <Check className="h-3 w-3" />
+                </button>
+              </div>
+            ) : (
+              /* Sem número ainda — convida a informar */
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] text-amber-600 dark:text-amber-400">⚠️</span>
+                <p className="flex-1 text-[11px] leading-snug text-muted-foreground">
+                  <span className="font-medium text-amber-600 dark:text-amber-400">@lid</span>
+                  {" "}— número oculto pelo WhatsApp.{" "}
+                  <button
+                    onClick={() => setEditingPhone(true)}
+                    className="font-medium text-amber-600 underline underline-offset-2 hover:text-amber-700 dark:text-amber-400"
+                  >
+                    Informar número do cliente
+                  </button>
+                  {" "}para entregar as mensagens.
+                </p>
+              </div>
+            )}
           </div>
         )}
 

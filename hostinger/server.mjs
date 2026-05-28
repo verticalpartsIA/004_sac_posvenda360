@@ -612,14 +612,65 @@ async function handleWhatsappSend(req, res) {
   try { payload = JSON.parse(await readBody(req)); }
   catch { return json(400, { error: "Invalid JSON" }); }
 
-  const { remoteJid, text } = payload || {};
+  const { remoteJid, text, overridePhone } = payload || {};
   if (!remoteJid || !text?.trim()) return json(400, { error: "remoteJid e text são obrigatórios" });
 
-  // ── @lid: dispositivo vinculado — Evolution API não consegue entregar ──────
-  // Salvamos no Supabase apenas (mensagem aparece no chat como "enviada")
-  // sem tentar a Evolution, que sempre retornaria 400/502 para esses JIDs.
+  // ── @lid: dispositivo vinculado — WhatsApp oculta o número real ──────────
+  // Se o operador informou o número manual (overridePhone), envia via Evolution
+  // usando o número real, mas salva com o JID @lid original (aparece na thread).
+  // Sem overridePhone → salva apenas localmente (comportamento anterior).
   if (String(remoteJid).endsWith("@lid")) {
-    console.log("[send] @lid JID — salva local, não envia via Evolution:", remoteJid);
+    // Normaliza o número: apenas dígitos, garante prefixo 55 (Brasil)
+    const rawPhone  = String(overridePhone ?? "").replace(/\D/g, "");
+    const realPhone = rawPhone
+      ? (rawPhone.startsWith("55") ? rawPhone : `55${rawPhone}`)
+      : "";
+
+    if (realPhone) {
+      // ── tem número manual: tenta entregar via Evolution ──────────────────
+      console.log(`[send] @lid com overridePhone → enviando para ${realPhone} (JID original: ${remoteJid})`);
+      let evResult = {};
+      try {
+        const r = await fetch(`http://72.61.48.156:8080/message/sendText/pv360`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", apikey: WH_APIKEY() },
+          body: JSON.stringify({ number: realPhone, text: text.trim() }),
+        });
+        evResult = await r.json().catch(() => ({}));
+        if (!r.ok) {
+          console.error("[send] @lid overridePhone Evolution error:", evResult);
+          return json(502, { error: "Falha ao enviar via Evolution API", detail: evResult });
+        }
+      } catch (e) {
+        return json(502, { error: "Evolution API indisponível", detail: e.message });
+      }
+      // Salva com remote_jid = @lid original → aparece na thread certa
+      try {
+        const sbKey = SB_SERVICE_KEY();
+        await fetch(`${SB_URL}/rest/v1/whatsapp_messages`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "apikey": sbKey,
+            "Authorization": `Bearer ${sbKey}`,
+          },
+          body: JSON.stringify({
+            instance: "pv360",
+            remote_jid: remoteJid,
+            from_me: true,
+            body: text.trim(),
+            message_id: evResult?.key?.id ?? null,
+            raw: { ...evResult, override_phone: realPhone },
+          }),
+        });
+      } catch (e) {
+        console.error("[send] @lid overridePhone supabase insert error:", e.message);
+      }
+      return json(200, { ok: true, key: evResult?.key, override_phone: realPhone });
+    }
+
+    // ── sem número manual: salva localmente (não entrega) ────────────────
+    console.log("[send] @lid sem overridePhone — salva local:", remoteJid);
     try {
       const sbKey = SB_SERVICE_KEY();
       await fetch(`${SB_URL}/rest/v1/whatsapp_messages`, {
