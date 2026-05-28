@@ -301,64 +301,60 @@ function ThreadView() {
 
       {/* ── Input ──────────────────────────────────────────────────────────── */}
       <div className="border-t bg-card px-4 py-3">
-        {remoteJid.endsWith("@lid") ? (
-          /* Contato @lid — WhatsApp oculta o número, Evolution API não consegue enviar */
-          <div className="rounded-lg bg-amber-500/8 border border-amber-500/20 px-4 py-3 text-center">
-            <p className="text-xs font-medium text-amber-600 dark:text-amber-400">
-              Contato via dispositivo vinculado (@lid)
-            </p>
-            <p className="mt-1 text-[11px] text-muted-foreground">
-              O WhatsApp oculta o número deste contato — respostas por aqui não são entregues.
-              Para responder, use o WhatsApp diretamente no número <span className="font-mono font-medium">(11) 99766-3780</span>.
-            </p>
-            <p className="mt-1.5 text-[10px] text-muted-foreground/60">
-              As mensagens recebidas ficam salvas e vinculadas ao ticket para acompanhamento.
+        {/* Aviso @lid — exibido acima do input, não substitui */}
+        {remoteJid.endsWith("@lid") && (
+          <div className="mb-2 flex items-start gap-2 rounded-lg border border-amber-500/20 bg-amber-500/8 px-3 py-2">
+            <span className="mt-px text-[11px] text-amber-600 dark:text-amber-400">⚠️</span>
+            <p className="text-[11px] leading-snug text-muted-foreground">
+              <span className="font-medium text-amber-600 dark:text-amber-400">Contato @lid</span>
+              {" "}— WhatsApp oculta o número. Mensagens salvas localmente{" "}
+              <span className="font-mono text-[10px]">(local)</span>, mas podem{" "}
+              <span className="font-medium">não ser entregues</span>. Para garantir entrega,
+              use o WhatsApp no <span className="font-mono font-medium">(11) 99766-3780</span>.
             </p>
           </div>
-        ) : (
-          <>
-            {sendError && (
-              <p className="mb-2 rounded-md bg-destructive/10 px-3 py-1.5 text-xs text-destructive">
-                {sendError}
-              </p>
-            )}
-            <div className="flex items-end gap-2">
-              <textarea
-                ref={inputRef}
-                rows={1}
-                className="flex-1 resize-none rounded-xl border bg-muted/40 px-3 py-2.5 text-sm outline-none placeholder:text-muted-foreground focus:ring-1 focus:ring-ring"
-                placeholder="Digite uma mensagem… (Enter envia · Shift+Enter nova linha)"
-                value={text}
-                onChange={(e) => {
-                  setText(e.target.value);
-                  e.target.style.height = "auto";
-                  e.target.style.height = Math.min(e.target.scrollHeight, 120) + "px";
-                }}
-                onKeyDown={handleKeyDown}
-                disabled={sending}
-              />
-              <button
-                onClick={send}
-                disabled={!text.trim() || sending}
-                className={cn(
-                  "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition-colors",
-                  text.trim() && !sending
-                    ? "bg-emerald-600 text-white hover:bg-emerald-700"
-                    : "bg-muted text-muted-foreground cursor-not-allowed",
-                )}
-              >
-                {sending ? (
-                  <RefreshCw className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Send className="h-4 w-4" />
-                )}
-              </button>
-            </div>
-            <p className="mt-1.5 text-center text-[10px] text-muted-foreground">
-              Enviando via <span className="font-mono">pv360</span> · (11) 99766-3780
-            </p>
-          </>
         )}
+
+        {sendError && (
+          <p className="mb-2 rounded-md bg-destructive/10 px-3 py-1.5 text-xs text-destructive">
+            {sendError}
+          </p>
+        )}
+        <div className="flex items-end gap-2">
+          <textarea
+            ref={inputRef}
+            rows={1}
+            className="flex-1 resize-none rounded-xl border bg-muted/40 px-3 py-2.5 text-sm outline-none placeholder:text-muted-foreground focus:ring-1 focus:ring-ring"
+            placeholder="Digite uma mensagem… (Enter envia · Shift+Enter nova linha)"
+            value={text}
+            onChange={(e) => {
+              setText(e.target.value);
+              e.target.style.height = "auto";
+              e.target.style.height = Math.min(e.target.scrollHeight, 120) + "px";
+            }}
+            onKeyDown={handleKeyDown}
+            disabled={sending}
+          />
+          <button
+            onClick={send}
+            disabled={!text.trim() || sending}
+            className={cn(
+              "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition-colors",
+              text.trim() && !sending
+                ? "bg-emerald-600 text-white hover:bg-emerald-700"
+                : "bg-muted text-muted-foreground cursor-not-allowed",
+            )}
+          >
+            {sending ? (
+              <RefreshCw className="h-4 w-4 animate-spin" />
+            ) : (
+              <Send className="h-4 w-4" />
+            )}
+          </button>
+        </div>
+        <p className="mt-1.5 text-center text-[10px] text-muted-foreground">
+          Enviando via <span className="font-mono">pv360</span> · (11) 99766-3780
+        </p>
       </div>
     </div>
   );
