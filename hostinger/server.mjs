@@ -323,8 +323,17 @@ function _mascaraDoc(s) {
 }
 
 // ─── Contatos internos (corporativos) — tratamento VIP ────────────────────────
+// Chave = telefone só dígitos, DDD + número (sem o 55). Demais números virão depois.
 const INTERNAL_CONTACTS = {
-  "11994621946": { nome: "Diego Maeno", cargo: "CEO" },
+  "11994621946": { nome: "Diego Maeno",      cargo: "CEO",                          dept: "CEO" },
+  "11942464292": { nome: "Guilherme Garcia", cargo: "Líder Comercial",              dept: "Comercial" },
+  "11995578519": { nome: "Victoria Martins", cargo: "Assistente Comercial Pleno",   dept: "Comercial" },
+  "11992042442": { nome: "Bianca Maeno",     cargo: "Analista Jurídico",            dept: "Jurídico" },
+  "11988099494": { nome: "Giovanna Maeno",   cargo: "Marketing",                    dept: "Marketing" },
+  "11974808436": { nome: "Andreia Oliveira", cargo: "Auxiliar de Compras",          dept: "Compras" },
+  "11997663780": { nome: "Gelson Simões",    cargo: "Consultor Técnico Estratégico", dept: "Consultoria Técnica" },
+  "11918243810": { nome: "Matheus Rocha",    cargo: "Assistente de Expedição",      dept: "Logística" },
+  "11910280566": { nome: "Maria Fernanda",   cargo: "Auxiliar de Limpeza",          dept: "Administrativo" },
 };
 
 // Número local (DDD + número), sem o código do país (55)
@@ -1188,7 +1197,7 @@ const server = http.createServer(async (req, res) => {
       const claudeKey = ANTHROPIC_KEY();
       const notifyUrl = NOTIFY_URL();
       res.end(JSON.stringify({
-        deploy_version: "verti-1.2",
+        deploy_version: "verti-1.3",
         claude_key_set: claudeKey.length > 0,
         claude_key_prefix: claudeKey ? claudeKey.slice(0, 12) + "..." : null,
         claude_model: CLAUDE_MODEL(),
