@@ -162,27 +162,228 @@ async function handleWhatsappWebhook(req, res) {
 }
 
 // ─── Chamada ao Claude com histórico completo ─────────────────────────────────
-const CLAUDE_SYSTEM_PROMPT =
-  "Você é um atendente de pós-venda da VerticalParts, empresa especializada em peças para " +
-  "elevadores, escadas rolantes e esteiras (importações e produtos nacionais). " +
-  "Marcas principais: BST, Monarch, Fermator.\n\n" +
-  "Você atende clientes via WhatsApp. Siga estas diretrizes:\n\n" +
-  "COMUNICAÇÃO:\n" +
-  "- Mensagens curtas e objetivas (máximo 3-4 linhas por mensagem)\n" +
-  "- Tom profissional mas amigável\n" +
-  "- Português brasileiro coloquial mas correto\n" +
-  "- Use emojis com moderação quando apropriado\n\n" +
-  "VOCÊ PODE AJUDAR COM:\n" +
-  "- Acompanhamento de pedidos e ocorrências de pós-venda\n" +
-  "- Dúvidas sobre peças, produtos e compatibilidade\n" +
-  "- Status de entregas e prazos\n" +
-  "- Abertura de reclamações e registros de ocorrência\n\n" +
-  "QUANDO NÃO SOUBER:\n" +
-  "- Diga que vai verificar e que um especialista entrará em contato em breve\n" +
-  "- Nunca invente números de pedido, preços ou prazos específicos\n\n" +
-  "IMPORTANTE:\n" +
-  "- Se perguntarem se você é humano ou robô, seja honesto mas gentil\n" +
-  "- Priorize a resolução do problema do cliente";
+// ─── Config de atendimento: horários + feriados (fuso America/Sao_Paulo) ──────
+// Horário comercial VerticalParts: Seg–Qui 07:00–18:00 | Sex 07:00–17:00 | Sáb/Dom fechado
+const BUSINESS_HOURS = { 1: [7, 18], 2: [7, 18], 3: [7, 18], 4: [7, 18], 5: [7, 17] };
+
+// Páscoa (Computus) → base dos feriados móveis
+function easterSunday(year) {
+  const a = year % 19, b = Math.floor(year / 100), c = year % 100;
+  const d = Math.floor(b / 4), e = b % 4, f = Math.floor((b + 8) / 25);
+  const g = Math.floor((b - f + 1) / 3), h = (19 * a + b - d - g + 15) % 30;
+  const i = Math.floor(c / 4), k = c % 4, l = (32 + 2 * e + 2 * i - h - k) % 7;
+  const m = Math.floor((a + 11 * h + 22 * l) / 451);
+  const month = Math.floor((h + l - 7 * m + 114) / 31);
+  const day = ((h + l - 7 * m + 114) % 31) + 1;
+  return new Date(Date.UTC(year, month - 1, day));
+}
+const _addDays = (date, n) => { const x = new Date(date); x.setUTCDate(x.getUTCDate() + n); return x; };
+const _mmdd = (d) => String(d.getUTCMonth() + 1).padStart(2, "0") + "-" + String(d.getUTCDate()).padStart(2, "0");
+
+// Feriados (Nacional + Estado SP + Município Guarulhos). Ajuste a gosto da equipe.
+function holidaysFor(year) {
+  const e = easterSunday(year);
+  return {
+    [_mmdd(_addDays(e, -48))]: "Carnaval (segunda)",
+    [_mmdd(_addDays(e, -47))]: "Carnaval (terça)",
+    [_mmdd(_addDays(e, -2))]:  "Sexta-feira Santa",
+    [_mmdd(_addDays(e, 60))]:  "Corpus Christi",
+    "01-01": "Confraternização Universal",
+    "04-21": "Tiradentes",
+    "05-01": "Dia do Trabalho",
+    "09-07": "Independência do Brasil",
+    "10-12": "Nossa Senhora Aparecida",
+    "11-02": "Finados",
+    "11-15": "Proclamação da República",
+    "11-20": "Consciência Negra",
+    "12-25": "Natal",
+    "07-09": "Revolução Constitucionalista (Estado de SP)",
+    "12-08": "Aniversário de Guarulhos",
+  };
+}
+
+// Data/hora atual no fuso de São Paulo
+function nowSaoPaulo() {
+  const p = new Intl.DateTimeFormat("pt-BR", {
+    timeZone: "America/Sao_Paulo", year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", weekday: "long", hour12: false,
+  }).formatToParts(new Date());
+  const g = (t) => p.find((x) => x.type === t)?.value;
+  const y = +g("year"), mo = +g("month"), da = +g("day");
+  return {
+    year: y, monthDay: `${g("month")}-${g("day")}`, hour: +g("hour"), minute: +g("minute"),
+    dow: new Date(Date.UTC(y, mo - 1, da)).getUTCDay(), weekdayName: g("weekday"),
+    dateStr: `${g("day")}/${g("month")}/${g("year")}`, timeStr: `${g("hour")}h${g("minute")}`,
+  };
+}
+
+const HORARIO_TXT = "Segunda a Quinta das 07h às 18h; Sexta das 07h às 17h. Fechado aos sábados, domingos e feriados.";
+
+// Bloco dinâmico injetado a cada resposta: sabe a data/hora e se está aberto/feriado
+function atendimentoContexto() {
+  const n = nowSaoPaulo();
+  const hol = holidaysFor(n.year)[n.monthDay];
+  const hours = BUSINESS_HOURS[n.dow];
+  let status;
+  if (hol) status = `Hoje é FERIADO (${hol}) — equipe humana NÃO está atendendo.`;
+  else if (!hours) status = "Hoje é fim de semana — equipe humana NÃO está atendendo.";
+  else {
+    const aberto = n.hour >= hours[0] && n.hour < hours[1];
+    status = aberto
+      ? "AGORA estamos DENTRO do horário de atendimento."
+      : "AGORA estamos FORA do horário de atendimento (a equipe humana retorna no próximo horário comercial).";
+  }
+  const lista = Object.entries(holidaysFor(n.year))
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([d, nome]) => `${d.slice(3)}/${d.slice(0, 2)} ${nome}`)
+    .join("; ");
+  return `CONTEXTO DE HOJE (fuso de São Paulo):\n` +
+    `- Agora: ${n.weekdayName}, ${n.dateStr}, ${n.timeStr}\n` +
+    `- Horário comercial: ${HORARIO_TXT}\n` +
+    `- ${status}\n` +
+    `- Feriados de ${n.year} (Nacional + SP + Guarulhos): ${lista}`;
+}
+
+const CLAUDE_BASE_PROMPT =
+`Você é a Verti, atendente virtual de pós-venda da VerticalParts, empresa especializada em peças para elevadores, escadas rolantes e esteiras (importações e produtos nacionais). Marcas principais: BST, Monarch, Fermator. Você atende clientes via WhatsApp.
+- Na primeira mensagem de uma conversa, apresente-se: "Olá, eu sou a Verti, da VerticalParts! 👋". Não fique repetindo o nome a cada mensagem.
+
+COMUNICAÇÃO:
+- Mensagens curtas e objetivas (máx. 3-4 linhas por mensagem).
+- Português brasileiro correto, tom profissional e cordial. Emojis com moderação.
+- Nunca use markdown, só texto simples (é WhatsApp).
+
+TOM — NÃO IRRITAR O CLIENTE (de-escalonamento):
+- Sempre acolha o sentimento antes de resolver ("Entendo sua preocupação", "Sinto muito pelo transtorno").
+- Nunca culpe o cliente, nunca discuta nem seja defensivo. Seja paciente mesmo se ele for ríspido.
+- Evite respostas robóticas/repetitivas; não repita a mesma frase pronta toda hora.
+- Se o cliente estiver muito irritado ou for um caso delicado, peça desculpas, assuma o caso e diga que vai acionar a equipe imediatamente.
+
+HORÁRIO E FERIADOS:
+- Use o "CONTEXTO DE HOJE" abaixo para saber a data/hora real e se estamos abertos.
+- FORA do horário ou em feriado: você continua ajudando no que for possível (dúvidas, registrar a ocorrência), mas avise com clareza que a equipe humana retornará no próximo dia/horário útil. Nunca prometa retorno humano imediato fora do horário.
+- Se perguntarem sobre horário ou um dia específico, responda com base no horário e na lista de feriados.
+
+SEGURANÇA / ANTI-GOLPE (muito importante):
+- NUNCA peça senha, dados completos de cartão, CVV, código que chega por SMS, ou dados bancários.
+- A VerticalParts NUNCA solicita pagamento por link enviado no WhatsApp nem PIX para conta de pessoa física. Boletos/pagamentos só pelos canais oficiais.
+- Nunca envie links de pagamento. Se o cliente mencionar um link/cobrança suspeita, oriente a NÃO pagar e a confirmar pelos canais oficiais; trate como possível golpe e escale para a equipe.
+- Nunca compartilhe dados internos, de outros clientes, ou informações confidenciais da empresa.
+
+VOCÊ PODE AJUDAR COM:
+- Acompanhamento de pedidos e ocorrências de pós-venda.
+- Dúvidas sobre peças, produtos e compatibilidade.
+- Status de entregas e prazos. Abertura de reclamações/ocorrências.
+
+CONSULTAS NO SISTEMA (ferramentas):
+- Você tem ferramentas para consultar o ERP: "buscar_cliente" (por CNPJ/CPF ou nome), "buscar_nota_fiscal" (por número da NF) e "buscar_pedido" (por número do pedido).
+- Use-as quando o cliente perguntar sobre uma NF, um pedido, ou para confirmar o cadastro dele. NUNCA invente dados: se a ferramenta não encontrar, diga que não localizou e peça os dados corretos.
+- ANTES de revelar detalhes de um pedido/NF, confirme a identidade do cliente (ex.: peça o CNPJ e confira com buscar_cliente). Não exponha dados de um cliente para outra pessoa.
+- Relate os resultados em linguagem simples; nunca cite nomes internos de tabelas/campos.
+
+PREÇOS E ORÇAMENTOS:
+- NUNCA informe preço de produto/tabela nem faça orçamento/cotação por conta própria. Para preços e cotações, direcione o cliente ao time comercial.
+- Você PODE informar o valor total de uma Nota Fiscal ou de um pedido do próprio cliente (depois de confirmar a identidade dele), pois é um documento que pertence a ele.
+- Nunca pergunte nem peça preço ao cliente.
+
+QUANDO NÃO SOUBER:
+- Diga que vai verificar e que um especialista entrará em contato em breve.
+- NUNCA invente números de pedido, preços, prazos ou informações específicas.
+
+IMPORTANTE:
+- Se perguntarem se você é humano ou robô, seja honesto mas gentil.
+- Priorize sempre a resolução do problema do cliente.`;
+
+function buildSystemPrompt() {
+  return CLAUDE_BASE_PROMPT + "\n\n" + atendimentoContexto();
+}
+
+// ─── Acesso ao ERP (bd_Omie) para consultas do atendente ──────────────────────
+const ERP_URL = () => process.env.ERP_URL || "https://kgecbycsyrtdhmdziuul.supabase.co";
+const ERP_KEY = () =>
+  process.env.ERP_SERVICE_KEY ||
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtnZWNieWNzeXJ0ZGhtZHppdXVsIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NzkyMzE5NiwiZXhwIjoyMDkzNDk5MTk2fQ.mF6ApvDd3dcxjZ1OEgYC86ShpIdMTIMNJCfbZYrX87o";
+function erpFetch(path) {
+  const k = ERP_KEY();
+  return fetch(`${ERP_URL()}/rest/v1${path}`, {
+    headers: { apikey: k, Authorization: `Bearer ${k}` },
+    signal: AbortSignal.timeout(15_000),
+  });
+}
+const _enc = (s) => encodeURIComponent(String(s ?? ""));
+const _digits = (s) => String(s ?? "").replace(/\D/g, "");
+function _mascaraDoc(s) {
+  const d = _digits(s);
+  if (d.length === 14) return `${d.slice(0,2)}.${d.slice(2,5)}.${d.slice(5,8)}/${d.slice(8,12)}-${d.slice(12,14)}`;
+  if (d.length === 11) return `${d.slice(0,3)}.${d.slice(3,6)}.${d.slice(6,9)}-${d.slice(9,11)}`;
+  return null;
+}
+
+// Ferramentas que o atendente pode usar para consultar o ERP
+const ATENDENTE_TOOLS = [
+  {
+    name: "buscar_cliente",
+    description: "Busca um cliente da VerticalParts no ERP por CNPJ/CPF ou por nome (razão social ou nome fantasia). Use para confirmar o cadastro do cliente.",
+    input_schema: {
+      type: "object",
+      properties: {
+        cnpj_cpf: { type: "string", description: "CNPJ ou CPF, com ou sem pontuação" },
+        nome: { type: "string", description: "Parte do nome / razão social / nome fantasia" },
+      },
+    },
+  },
+  {
+    name: "buscar_nota_fiscal",
+    description: "Busca uma Nota Fiscal emitida pela VerticalParts pelo número da NF. Retorna status, datas, valor, destinatário e pedido vinculado.",
+    input_schema: {
+      type: "object",
+      properties: { numero_nf: { type: "string", description: "Número da nota fiscal" } },
+      required: ["numero_nf"],
+    },
+  },
+  {
+    name: "buscar_pedido",
+    description: "Busca um pedido de venda da VerticalParts pelo número do pedido. Retorna etapa/status, valor, previsão e NF vinculada.",
+    input_schema: {
+      type: "object",
+      properties: { numero_pedido: { type: "string", description: "Número do pedido de venda" } },
+      required: ["numero_pedido"],
+    },
+  },
+];
+
+async function execAtendenteTool(name, input = {}) {
+  try {
+    if (name === "buscar_cliente") {
+      let filtro;
+      const mask = _mascaraDoc(input.cnpj_cpf);
+      if (mask) filtro = `cnpj_cpf=eq.${_enc(mask)}`;
+      else if (input.cnpj_cpf) filtro = `cnpj_cpf=ilike.*${_enc(input.cnpj_cpf)}*`;
+      else if (input.nome) filtro = `or=(razao_social.ilike.*${_enc(input.nome)}*,nome_fantasia.ilike.*${_enc(input.nome)}*)`;
+      else return { erro: "Informe cnpj_cpf ou nome." };
+      const r = await erpFetch(`/PN_Omie?select=codigo_cliente_omie,razao_social,nome_fantasia,cnpj_cpf,cidade,estado,telefone,email,situacao,faturamento_bloqueado&${filtro}&limit=5`);
+      if (!r.ok) return { erro: `falha na consulta (${r.status})` };
+      const rows = await r.json();
+      return rows.length ? { encontrado: true, clientes: rows } : { encontrado: false };
+    }
+    if (name === "buscar_nota_fiscal") {
+      const core = _digits(input.numero_nf).replace(/^0+/, "");
+      const r = await erpFetch(`/omie_nfe_emitidas?select=numero_nf,serie,status_nfe,data_emissao,data_saida,valor_total_nf,natureza_operacao,nome_destinatario,cnpj_cpf_destinatario,codigo_pedido_omie,chave_nfe,url_pdf&or=(numero_nf.eq.${_enc(input.numero_nf)},numero_nf.ilike.*${_enc(core)})&limit=5`);
+      if (!r.ok) return { erro: `falha na consulta (${r.status})` };
+      const rows = await r.json();
+      return rows.length ? { encontrado: true, notas: rows } : { encontrado: false };
+    }
+    if (name === "buscar_pedido") {
+      const r = await erpFetch(`/omie_orders?select=numero_pedido,etapa,status,numero_nf,chave_nfe,valor_total_pedido,data_previsao,data_inclusao,codigo_cliente_omie,observacao&or=(numero_pedido.eq.${_enc(input.numero_pedido)},numero_pedido.ilike.*${_enc(_digits(input.numero_pedido))})&limit=5`);
+      if (!r.ok) return { erro: `falha na consulta (${r.status})` };
+      const rows = await r.json();
+      return rows.length ? { encontrado: true, pedidos: rows } : { encontrado: false };
+    }
+    return { erro: "ferramenta desconhecida" };
+  } catch (e) {
+    return { erro: e.message };
+  }
+}
 
 async function callClaudeWithHistory(remoteJid) {
   const apiKey = ANTHROPIC_KEY();
@@ -205,27 +406,53 @@ async function callClaudeWithHistory(remoteJid) {
 
   if (history.length === 0) return null;
 
+  const messages = history;
   try {
-    const r = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model: CLAUDE_MODEL(),
-        max_tokens: 1024,
-        system: CLAUDE_SYSTEM_PROMPT,
-        messages: history,
-      }),
-      signal: AbortSignal.timeout(30_000),
-    });
-    if (r.ok) {
+    // Loop de tool use: Claude pode consultar o ERP antes de responder
+    for (let turn = 0; turn < 5; turn++) {
+      const r = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": apiKey,
+          "anthropic-version": "2023-06-01",
+        },
+        body: JSON.stringify({
+          model: CLAUDE_MODEL(),
+          max_tokens: 1024,
+          system: buildSystemPrompt(),
+          tools: ATENDENTE_TOOLS,
+          messages,
+        }),
+        signal: AbortSignal.timeout(30_000),
+      });
+      if (!r.ok) {
+        console.error("[claude] HTTP", r.status, await r.text().catch(() => ""));
+        return null;
+      }
       const data = await r.json();
-      return data.content?.[0]?.text?.trim() || null;
+      const blocks = data.content || [];
+
+      if (data.stop_reason === "tool_use") {
+        messages.push({ role: "assistant", content: blocks });
+        const toolResults = [];
+        for (const b of blocks) {
+          if (b.type === "tool_use") {
+            const result = await execAtendenteTool(b.name, b.input || {});
+            console.log(`[claude] tool ${b.name}`, JSON.stringify(b.input || {}));
+            toolResults.push({ type: "tool_result", tool_use_id: b.id, content: JSON.stringify(result) });
+          }
+        }
+        messages.push({ role: "user", content: toolResults });
+        continue; // próxima volta: Claude usa os resultados das consultas
+      }
+
+      // Resposta final em texto
+      const text = blocks.filter((b) => b.type === "text").map((b) => b.text).join("\n").trim();
+      return text || null;
     }
-    console.error("[claude] HTTP", r.status, await r.text().catch(() => ""));
+    console.error("[claude] limite de turnos de tool_use atingido");
+    return null;
   } catch (e) { console.error("[claude] call error:", e.message); }
   return null;
 }
@@ -367,7 +594,7 @@ async function generateFirstReply(contactName, messageBody) {
   const apiKey = ANTHROPIC_KEY();
   if (!apiKey) {
     // Texto fixo quando ANTHROPIC_API_KEY não está configurada
-    return `Olá${contactName ? ", " + contactName.split(" ")[0] : ""}! 👋\n\nRecebemos sua mensagem e em breve um de nossos atendentes irá retornar.\n\nHorário de atendimento: segunda a sexta, das 8h às 18h.\n\nObrigado! 🙏`;
+    return `Olá${contactName ? ", " + contactName.split(" ")[0] : ""}! 👋 Eu sou a Verti, da VerticalParts.\n\nRecebemos sua mensagem e em breve um de nossos atendentes irá retornar.\n\nHorário de atendimento: segunda a quinta das 7h às 18h e sexta das 7h às 17h.\n\nObrigado! 🙏`;
   }
 
   try {
@@ -382,10 +609,11 @@ async function generateFirstReply(contactName, messageBody) {
         model: CLAUDE_MODEL(),
         max_tokens: 200,
         system:
-          "Você é o assistente de atendimento da VerticalParts (pós-venda de peças industriais). " +
+          "Você é a Verti, atendente virtual da VerticalParts (pós-venda de peças industriais). " +
           "Responda APENAS com a mensagem de boas-vindas para o cliente, em português, " +
-          "de forma cordial e profissional, em 2-3 linhas. " +
-          "Mencione que um atendente irá retornar em breve. Não use markdown, só texto simples.",
+          "apresentando-se como Verti, de forma cordial e profissional, em 2-3 linhas. " +
+          "Mencione que um atendente irá retornar em breve. Não use markdown, só texto simples.\n\n" +
+          atendimentoContexto(),
         messages: [
           {
             role: "user",
@@ -397,14 +625,14 @@ async function generateFirstReply(contactName, messageBody) {
     if (r.ok) {
       const data = await r.json();
       return data.content?.[0]?.text?.trim() ||
-        `Olá, ${contactName}! Recebemos sua mensagem. Em breve retornamos. 🙏`;
+        `Olá, ${contactName}! Eu sou a Verti, da VerticalParts. Recebemos sua mensagem e em breve retornamos. 🙏`;
     }
     console.error("[automate] Claude HTTP", r.status, await r.text().catch(() => ""));
   } catch (e) {
     console.error("[automate] Claude error:", e.message);
   }
 
-  return `Olá, ${contactName.split(" ")[0]}! Recebemos sua mensagem e em breve um atendente irá retornar. 🙏`;
+  return `Olá, ${contactName.split(" ")[0]}! Eu sou a Verti, da VerticalParts. Recebemos sua mensagem e em breve um atendente irá retornar. 🙏`;
 }
 
 // Carrega .env — busca em múltiplos locais, do mais específico ao mais geral.
@@ -873,7 +1101,7 @@ const server = http.createServer(async (req, res) => {
       const claudeKey = ANTHROPIC_KEY();
       const notifyUrl = NOTIFY_URL();
       res.end(JSON.stringify({
-        deploy_version: "500233c",
+        deploy_version: "verti-1.0",
         claude_key_set: claudeKey.length > 0,
         claude_key_prefix: claudeKey ? claudeKey.slice(0, 12) + "..." : null,
         claude_model: CLAUDE_MODEL(),
