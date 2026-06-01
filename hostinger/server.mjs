@@ -278,9 +278,10 @@ VOCÊ PODE AJUDAR COM:
 CONSULTAS NO SISTEMA (ferramentas):
 - Você tem ferramentas para consultar o ERP: "buscar_cliente" (por CNPJ/CPF ou nome), "buscar_nota_fiscal" (por número da NF) e "buscar_pedido" (por número do pedido).
 - Use-as quando o cliente perguntar sobre uma NF, um pedido, ou para confirmar o cadastro dele. NUNCA invente dados: se a ferramenta não encontrar, diga que não localizou.
-- Número da NF e número do PEDIDO são coisas diferentes. Se o cliente der um número e você NÃO achar como nota fiscal, ofereça verificar como número de pedido (use buscar_pedido) — e vice-versa, antes de dizer que não existe.
-- NÃO exija que o cliente digite os zeros à esquerda: a busca já trata isso (ex.: "13614" e "00013614" são equivalentes). Não fique pedindo o "número completo" por causa de zeros.
-- ANTES de revelar detalhes de um pedido/NF, confirme a identidade do cliente (ex.: peça o CNPJ e confira com buscar_cliente). Não exponha dados de um cliente para outra pessoa.
+- 🔒 VALIDAR PRIMEIRO, REVELAR DEPOIS: você é como um atendente cuidadoso — pode FAZER perguntas, mas NÃO entrega dados sensíveis sem validar a identidade. As ferramentas de NF/pedido exigem o cliente já identificado (CNPJ / código). Se o "CONTEXTO DE HOJE" indicar um cliente já reconhecido pelo telefone, use o CNPJ/código dele. Caso contrário, identifique antes com buscar_cliente (peça CNPJ + nome da empresa).
+- NUNCA confirme nem repita dados de uma NF/pedido (nome da empresa, valor, itens) ANTES de validar — nem para "confirmar". Se o documento não for do cliente validado, diga apenas "não localizei no seu cadastro" — NUNCA revele de quem é.
+- Número da NF e número do PEDIDO são coisas diferentes. Se um número não bater como nota fiscal, ofereça verificar como número de pedido (use buscar_pedido) — e vice-versa.
+- NÃO exija que o cliente digite os zeros à esquerda: a busca já trata isso ("13614" = "00013614"). Não fique pedindo o "número completo" por causa de zeros.
 - Relate os resultados em linguagem simples; nunca cite nomes internos de tabelas/campos.
 
 PREÇOS E ORÇAMENTOS:
@@ -321,6 +322,62 @@ function _mascaraDoc(s) {
   return null;
 }
 
+// ─── Contatos internos (corporativos) — tratamento VIP ────────────────────────
+const INTERNAL_CONTACTS = {
+  "11994621946": { nome: "Diego Maeno", cargo: "CEO" },
+};
+
+// Número local (DDD + número), sem o código do país (55)
+function _phoneLocal(remoteJid) {
+  let d = _digits(remoteJid);
+  if (d.startsWith("55") && d.length > 11) d = d.slice(2);
+  return d;
+}
+
+// Descobre QUEM está falando: interno (VIP), cliente do cadastro (por telefone) ou desconhecido
+async function resolveQuemFala(remoteJid) {
+  const local = _phoneLocal(remoteJid);
+  if (INTERNAL_CONTACTS[local]) return { tipo: "interno", ...INTERNAL_CONTACTS[local] };
+  try {
+    if (local.length >= 10) {
+      const ddd = local.slice(0, 2);
+      const num = local.slice(2);
+      const last8 = num.slice(-8);
+      const seg = num.length >= 9 ? `${num.slice(0,5)}-${num.slice(5)}` : `${num.slice(0,4)}-${num.slice(4)}`;
+      const r = await erpFetch(`/PN_Omie?select=codigo_cliente_omie,razao_social,nome_fantasia,cnpj_cpf,contato,telefone,cidade,estado&telefone=ilike.*${_enc(seg)}*&limit=8`);
+      if (r.ok) {
+        const rows = await r.json();
+        const match = rows.find((x) => { const td = _digits(x.telefone || ""); return td.endsWith(last8) && td.includes(ddd); });
+        if (match) return { tipo: "cliente", ...match };
+      }
+    }
+  } catch (e) { console.error("[verti] resolveQuemFala:", e.message); }
+  return { tipo: "desconhecido" };
+}
+
+// Bloco de contexto injetado no prompt conforme quem está falando
+function contextoQuemFala(quem, isFirst) {
+  if (quem.tipo === "interno") {
+    const primeiro = quem.nome.split(" ")[0];
+    let s = `QUEM ESTÁ FALANDO: ${quem.nome} — ${quem.cargo} da VerticalParts. É um contato INTERNO/VIP da equipe (não é cliente externo). Pode ser mais aberto e prestativo com ele.`;
+    if (isFirst) s += `\nEsta é a PRIMEIRA mensagem: cumprimente com entusiasmo, algo como "Olá ${primeiro}, que prazer falar com você! Eu sou a Verti, conte comigo sempre 😊". Faça essa saudação calorosa SÓ na primeira mensagem.`;
+    return s;
+  }
+  if (quem.tipo === "cliente") {
+    const ident = quem.razao_social || quem.nome_fantasia || "(empresa do cadastro)";
+    let s = `QUEM ESTÁ FALANDO: número RECONHECIDO no cadastro — empresa ${ident}` +
+      (quem.cnpj_cpf ? ` (CNPJ ${quem.cnpj_cpf})` : "") +
+      (quem.contato ? `, contato cadastrado: ${quem.contato}` : "") + `.\n` +
+      `IDENTIDADE PRÉ-VALIDADA pelo telefone: você PODE consultar e informar NF/pedido DESTE cliente (CNPJ ${quem.cnpj_cpf || "?"}) — e somente dele. Ao consultar NF use cnpj_cliente="${quem.cnpj_cpf || ""}" e ao consultar pedido use codigo_cliente_omie=${quem.codigo_cliente_omie ?? "?"}.`;
+    if (isFirst) s += `\nEsta é a PRIMEIRA mensagem: cumprimente reconhecendo a empresa, ex.: "Olá! 😊 Encontrei seu número no nosso cadastro — você fala pela ${ident}, certo? Como posso te chamar?" e ofereça o menu de opções.`;
+    return s;
+  }
+  let s = `QUEM ESTÁ FALANDO: número NÃO reconhecido no cadastro. Trate como cliente a validar.`;
+  if (isFirst) s += `\nEsta é a PRIMEIRA mensagem: apresente-se e peça os dados para identificar, ex.: "Olá! 👋 Eu sou a Verti, da VerticalParts. Para te atender com segurança, me diz como posso te chamar, o nome da empresa e o CNPJ?" e ofereça o menu (① pedido/NF · ② devolução/troca · ③ garantia · ④ dúvida técnica · ⑤ atendente).`;
+  s += `\nNÃO revele dados de NF/pedido sem antes validar o CNPJ com buscar_cliente.`;
+  return s;
+}
+
 // Ferramentas que o atendente pode usar para consultar o ERP
 const ATENDENTE_TOOLS = [
   {
@@ -336,20 +393,26 @@ const ATENDENTE_TOOLS = [
   },
   {
     name: "buscar_nota_fiscal",
-    description: "Busca uma Nota Fiscal emitida pela VerticalParts pelo número da NF. Retorna status, datas, valor, destinatário e pedido vinculado.",
+    description: "Busca uma Nota Fiscal de venda pelo número da NF, RESTRITA ao cliente informado (segurança). Só retorna a nota se ela pertencer ao CNPJ do cliente. Exige o CNPJ do cliente já validado.",
     input_schema: {
       type: "object",
-      properties: { numero_nf: { type: "string", description: "Número da nota fiscal" } },
-      required: ["numero_nf"],
+      properties: {
+        numero_nf: { type: "string", description: "Número da nota fiscal (pode vir sem os zeros à esquerda)" },
+        cnpj_cliente: { type: "string", description: "CNPJ do cliente JÁ validado (do cadastro reconhecido ou confirmado via buscar_cliente). Obrigatório." },
+      },
+      required: ["numero_nf", "cnpj_cliente"],
     },
   },
   {
     name: "buscar_pedido",
-    description: "Busca um pedido de venda da VerticalParts pelo número do pedido. Retorna etapa/status, valor, previsão e NF vinculada.",
+    description: "Busca um pedido de venda pelo número, RESTRITO ao cliente informado (segurança). Só retorna se o pedido pertencer àquele cliente. Exige o código do cliente já validado.",
     input_schema: {
       type: "object",
-      properties: { numero_pedido: { type: "string", description: "Número do pedido de venda" } },
-      required: ["numero_pedido"],
+      properties: {
+        numero_pedido: { type: "string", description: "Número do pedido de venda" },
+        codigo_cliente_omie: { type: "integer", description: "Código do cliente (codigo_cliente_omie) já validado, obtido em buscar_cliente ou no cadastro reconhecido. Obrigatório." },
+      },
+      required: ["numero_pedido", "codigo_cliente_omie"],
     },
   },
 ];
@@ -369,13 +432,16 @@ async function execAtendenteTool(name, input = {}) {
       return rows.length ? { encontrado: true, clientes: rows } : { encontrado: false };
     }
     if (name === "buscar_nota_fiscal") {
+      // SEGURANÇA: só consulta NF restrita ao CNPJ do cliente já validado.
+      const mask = _mascaraDoc(input.cnpj_cliente);
+      if (!mask) return { erro: "Para consultar a NF, confirme primeiro o CNPJ do cliente (use buscar_cliente ou o cadastro reconhecido)." };
       // NFs de venda reais estão em omie_nfe_itens (tipo=S), nível item — agregamos por NF.
       // numero_nfe é texto com zeros à esquerda; o cliente pode digitar sem os zeros.
       const core = _digits(input.numero_nf).replace(/^0+/, "") || _digits(input.numero_nf);
-      const r = await erpFetch(`/omie_nfe_itens?select=numero_nfe,tipo,data_emissao,nome_parceiro,cnpj_parceiro,chave_nfe,descricao,quantidade,valor_total&tipo=eq.S&or=(numero_nfe.eq.${_enc(input.numero_nf)},numero_nfe.ilike.*${_enc(core)})&limit=80`);
+      const r = await erpFetch(`/omie_nfe_itens?select=numero_nfe,tipo,data_emissao,nome_parceiro,cnpj_parceiro,chave_nfe,descricao,quantidade,valor_total&tipo=eq.S&cnpj_parceiro=eq.${_enc(mask)}&or=(numero_nfe.eq.${_enc(input.numero_nf)},numero_nfe.ilike.*${_enc(core)})&limit=80`);
       if (!r.ok) return { erro: `falha na consulta (${r.status})` };
       const rows = await r.json();
-      if (!rows.length) return { encontrado: false };
+      if (!rows.length) return { encontrado: false, motivo: "Nenhuma nota com esse número no cadastro deste cliente." };
       const byNf = {};
       for (const it of rows) {
         const k = it.numero_nfe;
@@ -387,10 +453,13 @@ async function execAtendenteTool(name, input = {}) {
       return { encontrado: true, notas };
     }
     if (name === "buscar_pedido") {
-      const r = await erpFetch(`/omie_orders?select=numero_pedido,etapa,status,numero_nf,chave_nfe,valor_total_pedido,data_previsao,data_inclusao,codigo_cliente_omie,observacao&or=(numero_pedido.eq.${_enc(input.numero_pedido)},numero_pedido.ilike.*${_enc(_digits(input.numero_pedido))})&limit=5`);
+      // SEGURANÇA: só consulta pedido restrito ao cliente já validado.
+      const cod = parseInt(input.codigo_cliente_omie, 10);
+      if (!cod) return { erro: "Para consultar o pedido, confirme primeiro o cliente (use buscar_cliente ou o cadastro reconhecido) e passe o codigo_cliente_omie." };
+      const r = await erpFetch(`/omie_orders?select=numero_pedido,etapa,status,numero_nf,chave_nfe,valor_total_pedido,data_previsao,data_inclusao,codigo_cliente_omie,observacao&codigo_cliente_omie=eq.${cod}&or=(numero_pedido.eq.${_enc(input.numero_pedido)},numero_pedido.ilike.*${_enc(_digits(input.numero_pedido))})&limit=5`);
       if (!r.ok) return { erro: `falha na consulta (${r.status})` };
       const rows = await r.json();
-      return rows.length ? { encontrado: true, pedidos: rows } : { encontrado: false };
+      return rows.length ? { encontrado: true, pedidos: rows } : { encontrado: false, motivo: "Nenhum pedido com esse número para este cliente." };
     }
     return { erro: "ferramenta desconhecida" };
   } catch (e) {
@@ -419,6 +488,11 @@ async function callClaudeWithHistory(remoteJid) {
 
   if (history.length === 0) return null;
 
+  // Quem está falando (interno/cliente reconhecido/desconhecido) + se é a 1ª mensagem
+  const quem = await resolveQuemFala(remoteJid);
+  const isFirst = !history.some((m) => m.role === "assistant");
+  const sysPrompt = buildSystemPrompt() + "\n\n" + contextoQuemFala(quem, isFirst);
+
   const messages = history;
   try {
     // Loop de tool use: Claude pode consultar o ERP antes de responder
@@ -433,7 +507,7 @@ async function callClaudeWithHistory(remoteJid) {
         body: JSON.stringify({
           model: CLAUDE_MODEL(),
           max_tokens: 1024,
-          system: buildSystemPrompt(),
+          system: sysPrompt,
           tools: ATENDENTE_TOOLS,
           messages,
         }),
@@ -1114,7 +1188,7 @@ const server = http.createServer(async (req, res) => {
       const claudeKey = ANTHROPIC_KEY();
       const notifyUrl = NOTIFY_URL();
       res.end(JSON.stringify({
-        deploy_version: "verti-1.1",
+        deploy_version: "verti-1.2",
         claude_key_set: claudeKey.length > 0,
         claude_key_prefix: claudeKey ? claudeKey.slice(0, 12) + "..." : null,
         claude_model: CLAUDE_MODEL(),
