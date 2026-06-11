@@ -122,6 +122,11 @@ export default function SacNFDetalhe() {
   const [savingExp, setSavingExp] = useState(false);
   const [msgExp, setMsgExp] = useState("");
 
+  // Contato editável (WhatsApp / Email / nome do contato)
+  const [contato, setContato] = useState({ whatsapp: "", email: "", contato_nome: "" });
+  const [savingContato, setSavingContato] = useState(false);
+  const [msgContato, setMsgContato] = useState("");
+
   // Formulário SAC
   const [sac, setSac] = useState({
     previsao_pos_venda: "",
@@ -177,6 +182,11 @@ export default function SacNFDetalhe() {
         data_pos_venda: n.data_pos_venda ?? "",
         responsavel_pos_venda: n.responsavel_pos_venda ?? "",
       });
+      setContato({
+        whatsapp: n.sac_clientes?.whatsapp ?? n.sac_clientes?.telefone ?? "",
+        email: n.sac_clientes?.email ?? "",
+        contato_nome: n.sac_clientes?.contato ?? "",
+      });
     }
 
     if (pesquisaData) {
@@ -214,6 +224,19 @@ export default function SacNFDetalhe() {
     }).eq("id", nfId);
     setMsgExp(error ? "Erro ao salvar." : "Salvo com sucesso!");
     setSavingExp(false);
+  }
+
+  async function salvarContato() {
+    if (!nf?.cnpj_cliente) return;
+    setSavingContato(true); setMsgContato("");
+    const { error } = await supabase.from("sac_clientes").update({
+      whatsapp: contato.whatsapp || null,
+      email: contato.email || null,
+      contato: contato.contato_nome || null,
+      updated_at: new Date().toISOString(),
+    }).eq("cnpj", nf.cnpj_cliente);
+    setMsgContato(error ? "Erro ao salvar." : "Salvo!");
+    setSavingContato(false);
   }
 
   async function salvarSac() {
@@ -261,7 +284,6 @@ export default function SacNFDetalhe() {
   const cfg = STATUS_CONFIG[nf.status_entrega];
   const StatusIcon = cfg.icon;
   const nomeCliente = nf.sac_clientes?.nome_fantasia ?? nf.razao_social_cliente;
-  const whatsapp = nf.sac_clientes?.whatsapp ?? nf.sac_clientes?.telefone;
 
   return (
     <div className="space-y-5 max-w-3xl">
@@ -287,26 +309,62 @@ export default function SacNFDetalhe() {
         </div>
       </div>
 
-      {/* Informações do Omie (somente leitura) */}
-      <div className="rounded-xl border bg-muted/30 p-4 grid grid-cols-2 gap-x-6 gap-y-2 text-sm sm:grid-cols-4">
-        <div><span className="text-muted-foreground text-xs block">Transportadora</span>{nf.transportadora ?? "—"}</div>
-        <div><span className="text-muted-foreground text-xs block">Rastreio</span><span className="font-mono text-xs">{nf.codigo_rastreio ?? "—"}</span></div>
-        <div><span className="text-muted-foreground text-xs block">Previsão entrega</span>{fmtDate(nf.previsao_entrega)}</div>
-        <div><span className="text-muted-foreground text-xs block">Contato</span>{nf.sac_clientes?.contato ?? "—"}</div>
-        <div><span className="text-muted-foreground text-xs block">WhatsApp</span>{whatsapp ?? "—"}</div>
-        <div><span className="text-muted-foreground text-xs block">E-mail</span><span className="truncate block">{nf.sac_clientes?.email ?? "—"}</span></div>
-        {whatsapp && (
-          <div className="col-span-2 flex gap-2 pt-1">
-            <a href={`https://wa.me/55${whatsapp.replace(/\D/g, "")}`} target="_blank" rel="noreferrer"
+      {/* Informações — campos de contato editáveis */}
+      <div className="rounded-xl border bg-muted/30 p-4 space-y-3 text-sm">
+        <div className="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-4">
+          <div>
+            <span className="text-muted-foreground text-xs block mb-0.5">Transportadora</span>
+            <span>{nf.transportadora ?? "—"}</span>
+          </div>
+          <div>
+            <span className="text-muted-foreground text-xs block mb-0.5">Rastreio</span>
+            <span className="font-mono text-xs">{nf.codigo_rastreio ?? "—"}</span>
+          </div>
+          <div>
+            <span className="text-muted-foreground text-xs block mb-0.5">Previsão entrega</span>
+            <span>{fmtDate(nf.previsao_entrega)}</span>
+          </div>
+          <div>
+            <label className="text-muted-foreground text-xs block mb-0.5">Contato</label>
+            <input type="text" value={contato.contato_nome}
+              onChange={(e) => setContato((p) => ({ ...p, contato_nome: e.target.value }))}
+              placeholder="Nome do contato"
+              className="w-full rounded-md border bg-background px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-ring" />
+          </div>
+          <div>
+            <label className="text-muted-foreground text-xs block mb-0.5">WhatsApp</label>
+            <input type="tel" value={contato.whatsapp}
+              onChange={(e) => setContato((p) => ({ ...p, whatsapp: e.target.value }))}
+              placeholder="55 11 9xxxx-xxxx"
+              className="w-full rounded-md border bg-background px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-ring" />
+          </div>
+          <div className="sm:col-span-2">
+            <label className="text-muted-foreground text-xs block mb-0.5">E-mail</label>
+            <input type="email" value={contato.email}
+              onChange={(e) => setContato((p) => ({ ...p, email: e.target.value }))}
+              placeholder="email@empresa.com"
+              className="w-full rounded-md border bg-background px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-ring" />
+          </div>
+        </div>
+        <div className="flex flex-wrap items-center gap-2 pt-1 border-t">
+          {contato.whatsapp && (
+            <Link to="/whatsapp-threads"
               className="inline-flex items-center gap-1.5 rounded-lg bg-green-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-green-700">
-              <MessageCircle className="h-3.5 w-3.5" /> WhatsApp
-            </a>
-            <a href={`tel:${whatsapp}`}
+              <MessageCircle className="h-3.5 w-3.5" /> Conversar no WhatsApp
+            </Link>
+          )}
+          {contato.whatsapp && (
+            <a href={`tel:${contato.whatsapp}`}
               className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium hover:bg-muted">
               <Phone className="h-3.5 w-3.5" /> Ligar
             </a>
-          </div>
-        )}
+          )}
+          <button onClick={salvarContato} disabled={savingContato}
+            className="ml-auto inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium hover:bg-muted disabled:opacity-50">
+            <Save className="h-3.5 w-3.5" />{savingContato ? "Salvando..." : "Salvar contato"}
+          </button>
+          {msgContato && <span className="text-xs text-muted-foreground">{msgContato}</span>}
+        </div>
       </div>
 
       {/* ─── SEÇÃO 1: EXPEDIÇÃO ─── */}
