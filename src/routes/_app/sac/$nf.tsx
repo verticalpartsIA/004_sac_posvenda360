@@ -1,12 +1,8 @@
-import { createFileRoute, useParams } from "@tanstack/react-router";
+import { createFileRoute, useParams, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
-import {
-  Package, Clock, CheckCircle2, AlertTriangle, Send,
-  MessageCircle, ArrowLeft, Truck, Calendar, DollarSign,
-} from "lucide-react";
-import { Link } from "@tanstack/react-router";
+import { ArrowLeft, Save, Truck, MessageCircle, Phone, CheckCircle2, Clock, Package, AlertTriangle } from "lucide-react";
 
 export const Route = createFileRoute("/_app/sac/$nf")({
   component: SacNFDetalhe,
@@ -19,119 +15,244 @@ type NFDetalhe = {
   cnpj_cliente: string;
   classe_abc: "A" | "B" | "C";
   valor_total: number;
-  data_emissao: string;
+  data_emissao: string | null;
   previsao_entrega: string | null;
   status_entrega: "EMITIDA" | "EM_TRANSITO" | "ENTREGUE" | "ATRASADA";
   transportadora: string | null;
   codigo_rastreio: string | null;
-  pesquisa_enviada: boolean;
-  pesquisa_enviada_em: string | null;
-  dados_omie: Record<string, unknown> | null;
+  // expedição
+  data_coleta: string | null;
+  transportadora_entregou: boolean | null;
+  data_entrega_real: string | null;
+  comprovante_entrega: string | null;
+  // pós-venda
+  previsao_pos_venda: string | null;
+  status_pos_venda: "PENDENTE" | "EM_ANDAMENTO" | "CONCLUIDO";
+  data_pos_venda: string | null;
+  responsavel_pos_venda: string | null;
   sac_clientes: {
     nome_fantasia: string | null;
     whatsapp: string | null;
     email: string | null;
+    telefone: string | null;
     contato: string | null;
   } | null;
 };
 
-type Log = {
-  id: string;
-  canal: string;
-  tipo_mensagem: string;
-  status_envio: string;
-  destinatario: string;
-  conteudo_mensagem: string;
-  data_envio: string;
-};
-
 type Pesquisa = {
+  id: string;
   produto_correto: boolean | null;
   atendeu_prazo: boolean | null;
+  recebeu_nota_boleto: boolean | null;
+  produto_atendeu_expectativas: boolean | null;
   avaliacao_atendimento: number | null;
   nps_score: number | null;
+  dificuldade_compra: boolean | null;
   pontos_positivos: string | null;
   pontos_melhoria: string | null;
   compraria_novamente: boolean | null;
+  sugestoes: string | null;
+  observacoes: string | null;
   respondida_em: string | null;
 };
 
 const STATUS_CONFIG = {
-  EMITIDA:     { label: "Emitida",     icon: Package,       color: "bg-blue-50 text-blue-700 border-blue-200",  step: 1 },
-  EM_TRANSITO: { label: "Em trânsito", icon: Clock,         color: "bg-amber-50 text-amber-700 border-amber-200", step: 2 },
-  ENTREGUE:    { label: "Entregue",    icon: CheckCircle2,  color: "bg-green-50 text-green-700 border-green-200", step: 3 },
-  ATRASADA:    { label: "Atrasada",    icon: AlertTriangle, color: "bg-red-50 text-red-700 border-red-200",      step: 2 },
+  EMITIDA:     { label: "Emitida",     icon: Package,       cls: "bg-blue-50 text-blue-700 border-blue-200" },
+  EM_TRANSITO: { label: "Em trânsito", icon: Clock,         cls: "bg-amber-50 text-amber-700 border-amber-200" },
+  ENTREGUE:    { label: "Entregue",    icon: CheckCircle2,  cls: "bg-green-50 text-green-700 border-green-200" },
+  ATRASADA:    { label: "Atrasada",    icon: AlertTriangle, cls: "bg-red-50 text-red-700 border-red-200" },
 };
 
-const ABC_COLORS = { A: "bg-gold text-black", B: "bg-blue-100 text-blue-800", C: "bg-muted text-muted-foreground" };
+const ABC_CLS = { A: "bg-gold text-black", B: "bg-blue-100 text-blue-800", C: "bg-muted text-muted-foreground" };
 
-function fmt(valor: number) {
-  return valor.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-}
+function fmt(v: number) { return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }); }
 function fmtDate(d: string | null) {
   if (!d) return "—";
-  return new Date(d.includes("T") ? d : d + "T12:00:00").toLocaleDateString("pt-BR");
+  return new Date(d.length === 10 ? d + "T12:00:00" : d).toLocaleDateString("pt-BR");
 }
 
-const TIPO_LABEL: Record<string, string> = {
-  VIP_FOLLOWUP: "VIP Acompanhamento",
-  PRE_ENTREGA: "Pré-entrega",
-  POS_ENTREGA: "Pós-entrega",
-  PESQUISA: "Pesquisa enviada",
-  ALERTA_ATRASO: "Alerta de atraso",
-};
+// Botão Sim/Não/Não respondeu
+function SimNao({ value, onChange }: { value: boolean | null; onChange: (v: boolean | null) => void }) {
+  return (
+    <div className="flex gap-2">
+      {([true, false, null] as const).map((v) => (
+        <button key={String(v)} type="button"
+          onClick={() => onChange(v === value ? null : v)}
+          className={cn("rounded-lg border px-3 py-1.5 text-xs font-medium transition-all",
+            value === v
+              ? v === true ? "bg-green-500 text-white border-green-500"
+                : v === false ? "bg-red-500 text-white border-red-500"
+                : "bg-muted text-muted-foreground"
+              : "border-border hover:bg-muted")}>
+          {v === true ? "Sim" : v === false ? "Não" : "—"}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// Estrelas 1-5
+function Estrelas({ value, onChange }: { value: number | null; onChange: (v: number) => void }) {
+  return (
+    <div className="flex gap-1">
+      {[1, 2, 3, 4, 5].map((n) => (
+        <button key={n} type="button" onClick={() => onChange(n)}
+          className={cn("text-xl transition-all hover:scale-110", n <= (value ?? 0) ? "text-gold" : "text-muted-foreground/30")}>
+          ★
+        </button>
+      ))}
+    </div>
+  );
+}
 
 export default function SacNFDetalhe() {
   const { nf: nfId } = useParams({ from: "/_app/sac/$nf" });
   const [nf, setNf] = useState<NFDetalhe | null>(null);
-  const [logs, setLogs] = useState<Log[]>([]);
   const [pesquisa, setPesquisa] = useState<Pesquisa | null>(null);
   const [loading, setLoading] = useState(true);
-  const [enviando, setEnviando] = useState(false);
-  const [statusMsg, setStatusMsg] = useState("");
 
-  useEffect(() => {
-    void carregar();
-  }, [nfId]);
+  // Formulário Expedição
+  const [exp, setExp] = useState({
+    data_coleta: "",
+    transportadora_entregou: null as boolean | null,
+    data_entrega_real: "",
+    comprovante_entrega: "",
+    status_entrega: "EMITIDA" as NFDetalhe["status_entrega"],
+  });
+  const [savingExp, setSavingExp] = useState(false);
+  const [msgExp, setMsgExp] = useState("");
+
+  // Formulário SAC
+  const [sac, setSac] = useState({
+    previsao_pos_venda: "",
+    status_pos_venda: "PENDENTE" as "PENDENTE" | "EM_ANDAMENTO" | "CONCLUIDO",
+    data_pos_venda: "",
+    responsavel_pos_venda: "",
+  });
+  const [savingSac, setSavingSac] = useState(false);
+  const [msgSac, setMsgSac] = useState("");
+
+  // Formulário Pesquisa
+  const [pesq, setPesq] = useState<Omit<Pesquisa, "id" | "respondida_em">>({
+    produto_correto: null,
+    atendeu_prazo: null,
+    recebeu_nota_boleto: null,
+    produto_atendeu_expectativas: null,
+    avaliacao_atendimento: null,
+    nps_score: null,
+    dificuldade_compra: null,
+    pontos_positivos: "",
+    pontos_melhoria: "",
+    compraria_novamente: null,
+    sugestoes: "",
+    observacoes: "",
+  });
+  const [savingPesq, setSavingPesq] = useState(false);
+  const [msgPesq, setMsgPesq] = useState("");
+
+  useEffect(() => { void carregar(); }, [nfId]);
 
   async function carregar() {
     setLoading(true);
-    const [{ data: nfData }, { data: logsData }, { data: pesquisaData }] = await Promise.all([
-      supabase.from("sac_notas_fiscais").select("*, sac_clientes(nome_fantasia,whatsapp,email,contato)").eq("id", nfId).single(),
-      supabase.from("sac_logs_comunicacao").select("*").eq("nf_id", nfId).order("data_envio", { ascending: false }),
+    const [{ data: nfData }, { data: pesquisaData }] = await Promise.all([
+      supabase.from("sac_notas_fiscais")
+        .select("*, sac_clientes(nome_fantasia,whatsapp,email,telefone,contato)")
+        .eq("id", nfId).single(),
       supabase.from("sac_pesquisas").select("*").eq("nf_id", nfId).maybeSingle(),
     ]);
-    setNf(nfData as NFDetalhe | null);
-    setLogs((logsData as Log[]) ?? []);
-    setPesquisa(pesquisaData as Pesquisa | null);
+
+    if (nfData) {
+      const n = nfData as NFDetalhe;
+      setNf(n);
+      setExp({
+        data_coleta: n.data_coleta ?? "",
+        transportadora_entregou: n.transportadora_entregou ?? null,
+        data_entrega_real: n.data_entrega_real ?? "",
+        comprovante_entrega: n.comprovante_entrega ?? "",
+        status_entrega: n.status_entrega,
+      });
+      setSac({
+        previsao_pos_venda: n.previsao_pos_venda ?? "",
+        status_pos_venda: n.status_pos_venda ?? "PENDENTE",
+        data_pos_venda: n.data_pos_venda ?? "",
+        responsavel_pos_venda: n.responsavel_pos_venda ?? "",
+      });
+    }
+
+    if (pesquisaData) {
+      const p = pesquisaData as Pesquisa;
+      setPesquisa(p);
+      setPesq({
+        produto_correto: p.produto_correto,
+        atendeu_prazo: p.atendeu_prazo,
+        recebeu_nota_boleto: p.recebeu_nota_boleto,
+        produto_atendeu_expectativas: p.produto_atendeu_expectativas,
+        avaliacao_atendimento: p.avaliacao_atendimento,
+        nps_score: p.nps_score,
+        dificuldade_compra: p.dificuldade_compra,
+        pontos_positivos: p.pontos_positivos ?? "",
+        pontos_melhoria: p.pontos_melhoria ?? "",
+        compraria_novamente: p.compraria_novamente,
+        sugestoes: p.sugestoes ?? "",
+        observacoes: p.observacoes ?? "",
+      });
+    }
+
     setLoading(false);
   }
 
-  async function atualizarStatus(novoStatus: "EMITIDA" | "EM_TRANSITO" | "ENTREGUE" | "ATRASADA") {
-    if (!nf) return;
-    await supabase.from("sac_notas_fiscais").update({ status_entrega: novoStatus }).eq("id", nfId);
-    setNf((prev) => prev ? { ...prev, status_entrega: novoStatus } : prev);
-
-    if (novoStatus === "ENTREGUE") {
-      setStatusMsg("Status atualizado. A pesquisa de satisfação será agendada automaticamente.");
-    }
+  async function salvarExpedicao() {
+    setSavingExp(true);
+    setMsgExp("");
+    const { error } = await supabase.from("sac_notas_fiscais").update({
+      data_coleta: exp.data_coleta || null,
+      transportadora_entregou: exp.transportadora_entregou,
+      data_entrega_real: exp.data_entrega_real || null,
+      comprovante_entrega: exp.comprovante_entrega || null,
+      status_entrega: exp.status_entrega,
+      updated_at: new Date().toISOString(),
+    }).eq("id", nfId);
+    setMsgExp(error ? "Erro ao salvar." : "Salvo com sucesso!");
+    setSavingExp(false);
   }
 
-  async function enviarPesquisaManual() {
-    setEnviando(true);
-    setStatusMsg("");
-    const res = await fetch("/api/sac/enviar-pesquisa", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ nf_id: nfId }),
-    });
-    if (res.ok) {
-      setStatusMsg("Pesquisa enviada com sucesso!");
-      void carregar();
+  async function salvarSac() {
+    setSavingSac(true);
+    setMsgSac("");
+    const { error } = await supabase.from("sac_notas_fiscais").update({
+      previsao_pos_venda: sac.previsao_pos_venda || null,
+      status_pos_venda: sac.status_pos_venda,
+      data_pos_venda: sac.data_pos_venda || null,
+      responsavel_pos_venda: sac.responsavel_pos_venda || null,
+      updated_at: new Date().toISOString(),
+    }).eq("id", nfId);
+    setMsgSac(error ? "Erro ao salvar." : "Salvo com sucesso!");
+    setSavingSac(false);
+  }
+
+  async function salvarPesquisa() {
+    setSavingPesq(true);
+    setMsgPesq("");
+    const dados = {
+      ...pesq,
+      pontos_positivos: pesq.pontos_positivos || null,
+      pontos_melhoria: pesq.pontos_melhoria || null,
+      sugestoes: pesq.sugestoes || null,
+      observacoes: pesq.observacoes || null,
+      respondida_em: new Date().toISOString(),
+    };
+    let error;
+    if (pesquisa?.id) {
+      ({ error } = await supabase.from("sac_pesquisas").update(dados).eq("id", pesquisa.id));
     } else {
-      setStatusMsg("Erro ao enviar pesquisa. Tente novamente.");
+      ({ error } = await supabase.from("sac_pesquisas").insert({ nf_id: nfId, ...dados }));
     }
-    setEnviando(false);
+    if (!error) {
+      await supabase.from("sac_notas_fiscais").update({ pesquisa_enviada: true }).eq("id", nfId);
+      void carregar();
+    }
+    setMsgPesq(error ? "Erro ao salvar." : "Pesquisa salva!");
+    setSavingPesq(false);
   }
 
   if (loading) return <div className="py-20 text-center text-muted-foreground text-sm">Carregando...</div>;
@@ -139,230 +260,235 @@ export default function SacNFDetalhe() {
 
   const cfg = STATUS_CONFIG[nf.status_entrega];
   const StatusIcon = cfg.icon;
-  const steps = ["Emitida", "Em trânsito", "Entregue"];
-  const currentStep = cfg.step;
+  const nomeCliente = nf.sac_clientes?.nome_fantasia ?? nf.razao_social_cliente;
+  const whatsapp = nf.sac_clientes?.whatsapp ?? nf.sac_clientes?.telefone;
 
   return (
-    <div className="space-y-6 max-w-4xl">
-      {/* Header */}
-      <div className="flex items-start justify-between">
-        <div className="flex items-center gap-3">
-          <Link to="/sac" className="rounded-lg border p-2 hover:bg-muted">
-            <ArrowLeft className="h-4 w-4" />
-          </Link>
-          <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-2xl font-semibold">NF {nf.nf_numero}</h1>
-              <span className={cn("rounded-full px-2.5 py-0.5 text-[11px] font-bold", ABC_COLORS[nf.classe_abc])}>
-                Classe {nf.classe_abc}
-              </span>
-              <span className={cn("inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-medium", cfg.color)}>
-                <StatusIcon className="h-3 w-3" /> {cfg.label}
-              </span>
-            </div>
-            <p className="text-sm text-muted-foreground mt-0.5">
-              {nf.sac_clientes?.nome_fantasia ?? nf.razao_social_cliente} — CNPJ {nf.cnpj_cliente}
-            </p>
+    <div className="space-y-5 max-w-3xl">
+
+      {/* Cabeçalho */}
+      <div className="flex items-start gap-3">
+        <Link to="/sac" className="mt-1 rounded-lg border p-2 hover:bg-muted shrink-0">
+          <ArrowLeft className="h-4 w-4" />
+        </Link>
+        <div className="flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <h1 className="text-xl font-semibold">NF {nf.nf_numero}</h1>
+            <span className={cn("rounded-full px-2.5 py-0.5 text-[11px] font-bold", ABC_CLS[nf.classe_abc])}>Classe {nf.classe_abc}</span>
+            <span className={cn("inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-medium", cfg.cls)}>
+              <StatusIcon className="h-3 w-3" />{cfg.label}
+            </span>
           </div>
+          <p className="text-sm text-muted-foreground mt-0.5">{nomeCliente} — CNPJ {nf.cnpj_cliente}</p>
         </div>
-        <div className="text-right">
-          <div className="text-2xl font-semibold">{fmt(nf.valor_total ?? 0)}</div>
-          <div className="text-xs text-muted-foreground">valor total</div>
+        <div className="text-right shrink-0">
+          <div className="text-xl font-semibold">{fmt(nf.valor_total ?? 0)}</div>
+          <div className="text-xs text-muted-foreground">Emissão {fmtDate(nf.data_emissao)}</div>
         </div>
       </div>
 
-      {/* Timeline de status */}
-      <div className="rounded-xl border bg-card p-5">
-        <h2 className="text-sm font-medium mb-4">Timeline de entrega</h2>
-        <div className="flex items-center gap-0">
-          {steps.map((step, i) => {
-            const stepNum = i + 1;
-            const done = currentStep > stepNum || nf.status_entrega === "ENTREGUE";
-            const active = currentStep === stepNum;
-            const isAtrasada = nf.status_entrega === "ATRASADA" && stepNum === 2;
-            return (
-              <div key={step} className="flex items-center flex-1 last:flex-none">
-                <div className="flex flex-col items-center">
-                  <div className={cn(
-                    "flex h-9 w-9 items-center justify-center rounded-full border-2 text-sm font-semibold transition-all",
-                    done || active
-                      ? isAtrasada ? "border-red-500 bg-red-50 text-red-700"
-                        : done ? "border-green-500 bg-green-500 text-white"
-                        : "border-primary bg-primary text-primary-foreground"
-                      : "border-muted-foreground/30 bg-muted text-muted-foreground"
-                  )}>
-                    {isAtrasada ? "!" : done && !active ? "✓" : stepNum}
-                  </div>
-                  <span className={cn("mt-1.5 text-[11px] font-medium",
-                    active || done ? "text-foreground" : "text-muted-foreground")}>
-                    {isAtrasada ? "Atrasada" : step}
-                  </span>
-                </div>
-                {i < steps.length - 1 && (
-                  <div className={cn("h-0.5 flex-1 mx-2 transition-all", currentStep > stepNum ? "bg-green-500" : "bg-muted")} />
-                )}
-              </div>
-            );
-          })}
-        </div>
-
-        {/* Atualizar status */}
-        <div className="mt-4 flex flex-wrap gap-2 border-t pt-4">
-          <span className="text-xs text-muted-foreground self-center">Atualizar status:</span>
-          {(["EMITIDA", "EM_TRANSITO", "ENTREGUE", "ATRASADA"] as const).map((s) => (
-            <button key={s} disabled={nf.status_entrega === s}
-              onClick={() => atualizarStatus(s)}
-              className={cn("rounded-lg border px-3 py-1.5 text-xs font-medium transition-all hover:bg-muted disabled:opacity-40 disabled:cursor-default",
-                nf.status_entrega === s && STATUS_CONFIG[s].color)}>
-              {STATUS_CONFIG[s].label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        {/* Info logística */}
-        <div className="rounded-xl border bg-card p-5 space-y-3">
-          <h2 className="text-sm font-medium">Logística</h2>
-          <div className="space-y-2 text-sm">
-            <div className="flex items-center gap-2">
-              <Truck className="h-4 w-4 text-muted-foreground shrink-0" />
-              <span className="text-muted-foreground">Transportadora:</span>
-              <span className="font-medium">{nf.transportadora ?? "—"}</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <Package className="h-4 w-4 text-muted-foreground shrink-0" />
-              <span className="text-muted-foreground">Rastreio:</span>
-              <span className="font-mono font-medium">{nf.codigo_rastreio ?? "—"}</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <Calendar className="h-4 w-4 text-muted-foreground shrink-0" />
-              <span className="text-muted-foreground">Emissão:</span>
-              <span>{fmtDate(nf.data_emissao)}</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <Calendar className="h-4 w-4 text-muted-foreground shrink-0" />
-              <span className="text-muted-foreground">Previsão:</span>
-              <span>{fmtDate(nf.previsao_entrega)}</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <DollarSign className="h-4 w-4 text-muted-foreground shrink-0" />
-              <span className="text-muted-foreground">Valor:</span>
-              <span className="font-semibold">{fmt(nf.valor_total ?? 0)}</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Contato */}
-        <div className="rounded-xl border bg-card p-5 space-y-3">
-          <h2 className="text-sm font-medium">Contato do cliente</h2>
-          <div className="space-y-2 text-sm">
-            <div><span className="text-muted-foreground">Nome:</span> <span className="font-medium">{nf.sac_clientes?.contato ?? "—"}</span></div>
-            <div><span className="text-muted-foreground">WhatsApp:</span> <span className="font-medium">{nf.sac_clientes?.whatsapp ?? "—"}</span></div>
-            <div><span className="text-muted-foreground">E-mail:</span> <span className="font-medium">{nf.sac_clientes?.email ?? "—"}</span></div>
-          </div>
-          {nf.sac_clientes?.whatsapp && (
-            <a href={`https://wa.me/55${nf.sac_clientes.whatsapp.replace(/\D/g, "")}`} target="_blank" rel="noreferrer"
-              className="inline-flex items-center gap-2 rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700 transition-colors">
-              <MessageCircle className="h-4 w-4" /> Abrir no WhatsApp
+      {/* Informações do Omie (somente leitura) */}
+      <div className="rounded-xl border bg-muted/30 p-4 grid grid-cols-2 gap-x-6 gap-y-2 text-sm sm:grid-cols-4">
+        <div><span className="text-muted-foreground text-xs block">Transportadora</span>{nf.transportadora ?? "—"}</div>
+        <div><span className="text-muted-foreground text-xs block">Rastreio</span><span className="font-mono text-xs">{nf.codigo_rastreio ?? "—"}</span></div>
+        <div><span className="text-muted-foreground text-xs block">Previsão entrega</span>{fmtDate(nf.previsao_entrega)}</div>
+        <div><span className="text-muted-foreground text-xs block">Contato</span>{nf.sac_clientes?.contato ?? "—"}</div>
+        <div><span className="text-muted-foreground text-xs block">WhatsApp</span>{whatsapp ?? "—"}</div>
+        <div><span className="text-muted-foreground text-xs block">E-mail</span><span className="truncate block">{nf.sac_clientes?.email ?? "—"}</span></div>
+        {whatsapp && (
+          <div className="col-span-2 flex gap-2 pt-1">
+            <a href={`https://wa.me/55${whatsapp.replace(/\D/g, "")}`} target="_blank" rel="noreferrer"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-green-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-green-700">
+              <MessageCircle className="h-3.5 w-3.5" /> WhatsApp
             </a>
-          )}
-        </div>
-      </div>
-
-      {/* Pesquisa de satisfação */}
-      <div className="rounded-xl border bg-card p-5">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-sm font-medium">Pesquisa de satisfação</h2>
-          {!nf.pesquisa_enviada && (
-            <button onClick={enviarPesquisaManual} disabled={enviando}
-              className="inline-flex items-center gap-2 rounded-lg border px-3 py-1.5 text-xs font-medium hover:bg-muted disabled:opacity-50">
-              <Send className="h-3.5 w-3.5" /> {enviando ? "Enviando..." : "Enviar pesquisa"}
-            </button>
-          )}
-        </div>
-        {statusMsg && <p className="text-xs text-muted-foreground mb-3">{statusMsg}</p>}
-
-        {pesquisa?.respondida_em ? (
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 text-sm">
-            {[
-              { label: "Produto correto?", val: pesquisa.produto_correto },
-              { label: "Atendeu prazo?", val: pesquisa.atendeu_prazo },
-              { label: "Compraria novamente?", val: pesquisa.compraria_novamente },
-            ].map(({ label, val }) => (
-              <div key={label} className="rounded-lg bg-muted/50 p-3">
-                <div className="text-xs text-muted-foreground">{label}</div>
-                <div className={cn("text-base font-semibold mt-0.5", val ? "text-green-600" : "text-red-600")}>
-                  {val === null ? "—" : val ? "Sim ✓" : "Não ✗"}
-                </div>
-              </div>
-            ))}
-            {pesquisa.nps_score !== null && (
-              <div className="rounded-lg bg-muted/50 p-3">
-                <div className="text-xs text-muted-foreground">NPS Score</div>
-                <div className="text-base font-semibold mt-0.5">{pesquisa.nps_score}/10</div>
-              </div>
-            )}
-            {pesquisa.avaliacao_atendimento !== null && (
-              <div className="rounded-lg bg-muted/50 p-3">
-                <div className="text-xs text-muted-foreground">Avaliação atendimento</div>
-                <div className="text-base font-semibold mt-0.5">{"★".repeat(pesquisa.avaliacao_atendimento)}</div>
-              </div>
-            )}
-            {pesquisa.pontos_positivos && (
-              <div className="rounded-lg bg-muted/50 p-3 col-span-full">
-                <div className="text-xs text-muted-foreground">Pontos positivos</div>
-                <div className="text-sm mt-0.5">{pesquisa.pontos_positivos}</div>
-              </div>
-            )}
-            {pesquisa.pontos_melhoria && (
-              <div className="rounded-lg bg-muted/50 p-3 col-span-full">
-                <div className="text-xs text-muted-foreground">Pontos de melhoria</div>
-                <div className="text-sm mt-0.5">{pesquisa.pontos_melhoria}</div>
-              </div>
-            )}
-            <div className="col-span-full text-xs text-muted-foreground">
-              Respondida em {fmtDate(pesquisa.respondida_em)}
-            </div>
+            <a href={`tel:${whatsapp}`}
+              className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium hover:bg-muted">
+              <Phone className="h-3.5 w-3.5" /> Ligar
+            </a>
           </div>
-        ) : nf.pesquisa_enviada ? (
-          <p className="text-sm text-muted-foreground">
-            Pesquisa enviada em {fmtDate(nf.pesquisa_enviada_em)} — aguardando resposta do cliente.
-          </p>
-        ) : (
-          <p className="text-sm text-muted-foreground">
-            Pesquisa ainda não enviada. Clique em "Enviar pesquisa" para disparar via WhatsApp.
-          </p>
         )}
       </div>
 
-      {/* Log de comunicações */}
-      {logs.length > 0 && (
-        <div className="rounded-xl border bg-card p-5">
-          <h2 className="text-sm font-medium mb-4">Log de comunicações</h2>
-          <div className="space-y-3">
-            {logs.map((log) => (
-              <div key={log.id} className="flex items-start gap-3 text-sm border-b last:border-0 pb-3 last:pb-0">
-                <div className={cn("mt-0.5 rounded-full w-2 h-2 shrink-0",
-                  log.status_envio === "ENVIADO" ? "bg-green-500" : "bg-red-500")} />
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="font-medium">{TIPO_LABEL[log.tipo_mensagem] ?? log.tipo_mensagem}</span>
-                    <span className="text-xs text-muted-foreground">{log.canal}</span>
-                    <span className="ml-auto text-xs text-muted-foreground">{fmtDate(log.data_envio)}</span>
-                  </div>
-                  <div className="text-xs text-muted-foreground truncate mt-0.5">{log.destinatario}</div>
-                  {log.conteudo_mensagem && (
-                    <div className="mt-1 rounded bg-muted/50 px-2 py-1.5 text-xs text-muted-foreground whitespace-pre-wrap line-clamp-3">
-                      {log.conteudo_mensagem}
-                    </div>
-                  )}
-                </div>
-              </div>
-            ))}
+      {/* ─── SEÇÃO 1: EXPEDIÇÃO ─── */}
+      <div className="rounded-xl border bg-card overflow-hidden">
+        <div className="flex items-center gap-2 border-b bg-amber-50 px-5 py-3">
+          <Truck className="h-4 w-4 text-amber-700" />
+          <h2 className="text-sm font-semibold text-amber-800">Expedição — Confirmação de Entrega</h2>
+        </div>
+        <div className="p-5 space-y-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div>
+              <label className="block text-xs font-medium text-muted-foreground mb-1">Status da entrega</label>
+              <select value={exp.status_entrega}
+                onChange={(e) => setExp((p) => ({ ...p, status_entrega: e.target.value as NFDetalhe["status_entrega"] }))}
+                className="w-full rounded-lg border bg-background px-3 py-2 text-sm">
+                <option value="EMITIDA">Emitida</option>
+                <option value="EM_TRANSITO">Em trânsito</option>
+                <option value="ENTREGUE">Entregue</option>
+                <option value="ATRASADA">Atrasada</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-muted-foreground mb-1">Data coleta / retirada</label>
+              <input type="date" value={exp.data_coleta}
+                onChange={(e) => setExp((p) => ({ ...p, data_coleta: e.target.value }))}
+                className="w-full rounded-lg border bg-background px-3 py-2 text-sm" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-muted-foreground mb-1">Data de entrega real</label>
+              <input type="date" value={exp.data_entrega_real}
+                onChange={(e) => setExp((p) => ({ ...p, data_entrega_real: e.target.value }))}
+                className="w-full rounded-lg border bg-background px-3 py-2 text-sm" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-muted-foreground mb-1">Comprovante de entrega</label>
+              <input type="text" value={exp.comprovante_entrega} placeholder="Código, protocolo ou observação"
+                onChange={(e) => setExp((p) => ({ ...p, comprovante_entrega: e.target.value }))}
+                className="w-full rounded-lg border bg-background px-3 py-2 text-sm" />
+            </div>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-muted-foreground mb-2">Transportadora entregou?</label>
+            <SimNao value={exp.transportadora_entregou}
+              onChange={(v) => setExp((p) => ({ ...p, transportadora_entregou: v }))} />
+          </div>
+          <div className="flex items-center gap-3 border-t pt-4">
+            <button onClick={salvarExpedicao} disabled={savingExp}
+              className="inline-flex items-center gap-2 rounded-lg bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-700 disabled:opacity-50">
+              <Save className="h-4 w-4" />{savingExp ? "Salvando..." : "Salvar Expedição"}
+            </button>
+            {msgExp && <span className="text-sm text-muted-foreground">{msgExp}</span>}
           </div>
         </div>
-      )}
+      </div>
+
+      {/* ─── SEÇÃO 2: CONTROLE SAC ─── */}
+      <div className="rounded-xl border bg-card overflow-hidden">
+        <div className="flex items-center gap-2 border-b bg-blue-50 px-5 py-3">
+          <MessageCircle className="h-4 w-4 text-blue-700" />
+          <h2 className="text-sm font-semibold text-blue-800">SAC — Controle de Pós-Venda</h2>
+        </div>
+        <div className="p-5 space-y-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            <div>
+              <label className="block text-xs font-medium text-muted-foreground mb-1">Previsão do contato SAC</label>
+              <input type="date" value={sac.previsao_pos_venda}
+                onChange={(e) => setSac((p) => ({ ...p, previsao_pos_venda: e.target.value }))}
+                className="w-full rounded-lg border bg-background px-3 py-2 text-sm" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-muted-foreground mb-1">Status pós-venda</label>
+              <select value={sac.status_pos_venda}
+                onChange={(e) => setSac((p) => ({ ...p, status_pos_venda: e.target.value as "PENDENTE" | "EM_ANDAMENTO" | "CONCLUIDO" }))}
+                className="w-full rounded-lg border bg-background px-3 py-2 text-sm">
+                <option value="PENDENTE">Pendente</option>
+                <option value="EM_ANDAMENTO">Em andamento</option>
+                <option value="CONCLUIDO">Concluído</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-muted-foreground mb-1">Data do contato</label>
+              <input type="date" value={sac.data_pos_venda}
+                onChange={(e) => setSac((p) => ({ ...p, data_pos_venda: e.target.value }))}
+                className="w-full rounded-lg border bg-background px-3 py-2 text-sm" />
+            </div>
+            <div className="sm:col-span-3">
+              <label className="block text-xs font-medium text-muted-foreground mb-1">Responsável pelo contato</label>
+              <input type="text" value={sac.responsavel_pos_venda} placeholder="Nome de quem fez o contato"
+                onChange={(e) => setSac((p) => ({ ...p, responsavel_pos_venda: e.target.value }))}
+                className="w-full rounded-lg border bg-background px-3 py-2 text-sm" />
+            </div>
+          </div>
+          <div className="flex items-center gap-3 border-t pt-4">
+            <button onClick={salvarSac} disabled={savingSac}
+              className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50">
+              <Save className="h-4 w-4" />{savingSac ? "Salvando..." : "Salvar SAC"}
+            </button>
+            {msgSac && <span className="text-sm text-muted-foreground">{msgSac}</span>}
+          </div>
+        </div>
+      </div>
+
+      {/* ─── SEÇÃO 3: PESQUISA DE SATISFAÇÃO ─── */}
+      <div className="rounded-xl border bg-card overflow-hidden">
+        <div className="flex items-center gap-2 border-b bg-green-50 px-5 py-3">
+          <CheckCircle2 className="h-4 w-4 text-green-700" />
+          <h2 className="text-sm font-semibold text-green-800">Pesquisa de Satisfação</h2>
+          <span className="ml-auto text-xs text-muted-foreground">
+            {pesquisa?.respondida_em ? `Preenchida em ${fmtDate(pesquisa.respondida_em)}` : "Não preenchida ainda"}
+          </span>
+        </div>
+        <div className="p-5 space-y-5">
+
+          {/* Perguntas Sim/Não */}
+          {([
+            { key: "produto_correto",             label: "O produto chegou correto?" },
+            { key: "atendeu_prazo",               label: "Atendeu o prazo de entrega?" },
+            { key: "recebeu_nota_boleto",          label: "Recebeu a nota fiscal e boleto?" },
+            { key: "produto_atendeu_expectativas", label: "O produto atendeu as expectativas?" },
+            { key: "dificuldade_compra",           label: "Teve dificuldade na compra?" },
+            { key: "compraria_novamente",          label: "Compraria novamente?" },
+          ] as { key: keyof typeof pesq; label: string }[]).map(({ key, label }) => (
+            <div key={key} className="flex items-center justify-between gap-4 border-b pb-4 last:border-0 last:pb-0">
+              <span className="text-sm font-medium">{label}</span>
+              <SimNao value={pesq[key] as boolean | null}
+                onChange={(v) => setPesq((p) => ({ ...p, [key]: v }))} />
+            </div>
+          ))}
+
+          {/* Avaliação atendimento */}
+          <div className="flex items-center justify-between gap-4 border-b pb-4">
+            <span className="text-sm font-medium">Avaliação do atendimento</span>
+            <Estrelas value={pesq.avaliacao_atendimento}
+              onChange={(v) => setPesq((p) => ({ ...p, avaliacao_atendimento: v }))} />
+          </div>
+
+          {/* NPS */}
+          <div className="border-b pb-4">
+            <label className="block text-sm font-medium mb-2">
+              NPS — De 0 a 10, quanto indicaria a VerticalParts?
+              {pesq.nps_score !== null && <span className="ml-2 font-bold text-primary">{pesq.nps_score}</span>}
+            </label>
+            <div className="flex gap-1 flex-wrap">
+              {Array.from({ length: 11 }, (_, i) => (
+                <button key={i} type="button" onClick={() => setPesq((p) => ({ ...p, nps_score: i }))}
+                  className={cn("h-9 w-9 rounded-lg border text-sm font-semibold transition-all",
+                    pesq.nps_score === i
+                      ? i >= 9 ? "bg-green-500 text-white border-green-500"
+                        : i >= 7 ? "bg-amber-400 text-white border-amber-400"
+                        : "bg-red-500 text-white border-red-500"
+                      : "hover:bg-muted")}>
+                  {i}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Campos de texto */}
+          {([
+            { key: "pontos_positivos", label: "Pontos positivos da experiência" },
+            { key: "pontos_melhoria",  label: "Algo a melhorar?" },
+            { key: "sugestoes",        label: "Alguma sugestão?" },
+            { key: "observacoes",      label: "Observações gerais" },
+          ] as { key: keyof typeof pesq; label: string }[]).map(({ key, label }) => (
+            <div key={key}>
+              <label className="block text-xs font-medium text-muted-foreground mb-1">{label}</label>
+              <textarea rows={2} value={(pesq[key] as string) ?? ""}
+                onChange={(e) => setPesq((p) => ({ ...p, [key]: e.target.value }))}
+                className="w-full rounded-lg border bg-background px-3 py-2 text-sm resize-none" />
+            </div>
+          ))}
+
+          <div className="flex items-center gap-3 border-t pt-4">
+            <button onClick={salvarPesquisa} disabled={savingPesq}
+              className="inline-flex items-center gap-2 rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50">
+              <Save className="h-4 w-4" />{savingPesq ? "Salvando..." : "Salvar Pesquisa"}
+            </button>
+            {msgPesq && <span className="text-sm text-muted-foreground">{msgPesq}</span>}
+          </div>
+        </div>
+      </div>
+
     </div>
   );
 }
