@@ -234,7 +234,20 @@ export default function SacNFDetalhe() {
       status_entrega: exp.status_entrega,
       updated_at: new Date().toISOString(),
     } as any).eq("id", nfId);
-    setMsgExp(error ? "Erro ao salvar." : "Salvo com sucesso!");
+
+    if (error) {
+      setMsgExp("Erro ao salvar.");
+      setSavingExp(false);
+      return;
+    }
+
+    setMsgExp("Salvo! Criando tarefa no VP Click...");
+    const { error: fnErr } = await supabase.functions.invoke("pv360-delivery-event", {
+      body: { nf_id: nfId },
+    }).catch(() => ({ data: null, error: new Error("indisponível") }));
+
+    setMsgExp(fnErr ? "Salvo! (VP Click indisponível)" : "Salvo! Tarefa criada no VP Click.");
+    void carregar();
     setSavingExp(false);
   }
 
