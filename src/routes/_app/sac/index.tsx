@@ -18,6 +18,7 @@ type SacNF = {
   data_emissao: string;
   previsao_entrega: string | null;
   status_entrega: "EMITIDA" | "EM_TRANSITO" | "ENTREGUE" | "ATRASADA";
+  status_pos_venda: "PENDENTE" | "EM_ANDAMENTO" | "CONCLUIDO";
   transportadora: string | null;
   codigo_rastreio: string | null;
   pesquisa_enviada: boolean;
@@ -36,6 +37,12 @@ const ABC_COLORS = {
   C: "bg-muted text-muted-foreground",
 };
 
+const SAC_STATUS_CONFIG = {
+  PENDENTE:     { label: "Pendente",      color: "text-muted-foreground" },
+  EM_ANDAMENTO: { label: "Em andamento",  color: "text-amber-600 font-medium" },
+  CONCLUIDO:    { label: "Concluído",     color: "text-green-600 font-medium" },
+};
+
 function fmt(valor: number) {
   return valor.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
@@ -50,7 +57,7 @@ export default function SacPipeline() {
     setLoading(true);
     const { data } = await supabase
       .from("sac_notas_fiscais")
-      .select("id,nf_numero,razao_social_cliente,classe_abc,valor_total,data_emissao,previsao_entrega,status_entrega,transportadora,codigo_rastreio,pesquisa_enviada")
+      .select("id,nf_numero,razao_social_cliente,classe_abc,valor_total,data_emissao,previsao_entrega,status_entrega,status_pos_venda,transportadora,codigo_rastreio,pesquisa_enviada")
       .order("data_emissao", { ascending: false })
       .limit(200);
     setNfs((data as SacNF[]) ?? []);
@@ -138,6 +145,7 @@ export default function SacPipeline() {
                 <th className="px-4 py-3 text-left">Emissão</th>
                 <th className="px-4 py-3 text-left">Previsão</th>
                 <th className="px-4 py-3 text-left">Status</th>
+                <th className="px-4 py-3 text-left">SAC</th>
                 <th className="px-4 py-3 text-center">Pesquisa</th>
                 <th className="px-4 py-3 text-center"></th>
               </tr>
@@ -161,6 +169,11 @@ export default function SacPipeline() {
                     <td className="px-4 py-3">
                       <span className={cn("inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] font-medium", cfg.color)}>
                         <Icon className="h-3 w-3" />{cfg.label}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={cn("text-xs", SAC_STATUS_CONFIG[nf.status_pos_venda ?? "PENDENTE"].color)}>
+                        {SAC_STATUS_CONFIG[nf.status_pos_venda ?? "PENDENTE"].label}
                       </span>
                     </td>
                     <td className="px-4 py-3 text-center">
