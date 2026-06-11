@@ -1186,6 +1186,267 @@ async function handleLidAgendaDelete(req, res) {
   res.end(JSON.stringify(r.ok ? { ok: true } : { error: "Falha ao remover" }));
 }
 
+// ═══ SAC — Omie webhook + pesquisa de satisfação ══════════════════════════════
+// POST /api/webhooks/omie       ← Omie chama quando pedido é faturado / NF emitida
+// POST /api/sac/enviar-pesquisa ← disparo manual de pesquisa via WhatsApp
+
+const OMIE_APP_KEY    = () => process.env.OMIE_APP_KEY    || "8463170967";
+const OMIE_APP_SECRET = () => process.env.OMIE_APP_SECRET || "69e22b773842044fdb218178521cac59";
+const EVO_URL_SAC     = () => process.env.EVOLUTION_URL   || "http://72.61.48.156:8080";
+const EVO_INSTANCE    = () => process.env.EVOLUTION_INSTANCE || "pv360";
+
+async function omieCall(endpoint, call, param) {
+  const r = await fetch(`https://app.omie.com.br/api/v1/${endpoint}/`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ call, app_key: OMIE_APP_KEY(), app_secret: OMIE_APP_SECRET(), param: [param] }),
+    signal: AbortSignal.timeout(30_000),
+  });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok || data.faultstring) {
+    throw new Error(`Omie ${call}: ${data.faultstring || `HTTP ${r.status}`}`);
+  }
+  return data;
+}
+
+function classificarABC(valor) {
+  if (valor >= 50000) return "A";
+  if (valor >= 10000) return "B";
+  return "C";
+}
+
+function parseDateBR(d) {
+  // DD/MM/YYYY → YYYY-MM-DD (retorna null se inválido)
+  if (!d || typeof d !== "string" || !d.includes("/")) return null;
+  const [dd, mm, yyyy] = d.split("/");
+  if (!dd || !mm || !yyyy) return null;
+  return `${yyyy}-${mm.padStart(2, "0")}-${dd.padStart(2, "0")}`;
+}
+
+async function enviarWhatsAppSac(numero, texto) {
+  const raw = String(numero || "").replace(/\D/g, "");
+  if (!raw) return false;
+  const phone = raw.startsWith("55") ? raw : `55${raw}`;
+  try {
+    const r = await fetch(`${EVO_URL_SAC()}/message/sendText/${EVO_INSTANCE()}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", apikey: WH_APIKEY() },
+      body: JSON.stringify({ number: phone, text: texto }),
+      signal: AbortSignal.timeout(20_000),
+    });
+    return r.ok;
+  } catch (e) {
+    console.error("[sac] Evolution indisponível:", e.message);
+    return false;
+  }
+}
+
+async function registrarLogSac(nfId, canal, tipo, destinatario, conteudo, ok) {
+  await sbFetch("/rest/v1/sac_logs_comunicacao", {
+    method: "POST",
+    body: JSON.stringify({
+      nf_id: nfId, canal, tipo_mensagem: tipo,
+      status_envio: ok ? "ENVIADO" : "ERRO",
+      destinatario, conteudo_mensagem: conteudo,
+    }),
+  }).catch((e) => console.error("[sac] log error:", e.message));
+}
+
+// Ingestão: pedido Omie → sac_clientes + sac_notas_fiscais + fluxo VIP
+async function ingerirPedidoOmie(codigoPedido) {
+  // 1. Consultar pedido completo no Omie
+  const pedidoResp = await omieCall("produtos/pedido", "ConsultarPedido", { codigo_pedido: codigoPedido });
+  const pedido = pedidoResp.pedido_venda_produto;
+  if (!pedido?.cabecalho) throw new Error(`Pedido ${codigoPedido} sem cabeçalho`);
+
+  // 2. Consultar cliente no Omie
+  const cliResp = await omieCall("geral/clientes", "ConsultarCliente", {
+    codigo_cliente_omie: pedido.cabecalho.codigo_cliente,
+  });
+  const cli = cliResp;
+  const cnpj = String(cli.cnpj_cpf || "").replace(/\D/g, "");
+  const telefone = cli.telefone1_ddd && cli.telefone1_numero
+    ? `${cli.telefone1_ddd}${cli.telefone1_numero}`.replace(/\D/g, "")
+    : null;
+
+  const valorTotal = pedido.total_pedido?.valor_total_pedido ?? 0;
+  const classeAbc = classificarABC(valorTotal);
+
+  // 3. Upsert cliente (on_conflict=cnpj)
+  const cliR = await sbFetch("/rest/v1/sac_clientes?on_conflict=cnpj", {
+    method: "POST",
+    headers: { "Prefer": "resolution=merge-duplicates,return=representation" },
+    body: JSON.stringify({
+      cnpj,
+      razao_social: cli.razao_social || "—",
+      nome_fantasia: cli.nome_fantasia || null,
+      classe_abc: classeAbc,
+      email: cli.email || null,
+      telefone, whatsapp: telefone,
+      contato: cli.contato || null,
+      codigo_omie: cli.codigo_cliente_omie || pedido.cabecalho.codigo_cliente,
+      updated_at: new Date().toISOString(),
+    }),
+  });
+  const cliRows = await cliR.json().catch(() => []);
+  const clienteId = Array.isArray(cliRows) && cliRows[0]?.id ? cliRows[0].id : null;
+
+  // 4. Upsert NF (chave: codigo_pedido_omie via busca prévia)
+  const nfNumero = pedido.cabecalho.numero_pedido || String(codigoPedido);
+  const existing = await sbFetch(
+    `/rest/v1/sac_notas_fiscais?codigo_pedido_omie=eq.${codigoPedido}&select=id&limit=1`,
+    { method: "GET" },
+  ).then((r) => r.json()).catch(() => []);
+
+  const nfBody = {
+    nf_numero: nfNumero,
+    cliente_id: clienteId,
+    cnpj_cliente: cnpj,
+    razao_social_cliente: cli.razao_social || "—",
+    classe_abc: classeAbc,
+    data_emissao: parseDateBR(pedido.infoCadastro?.dFat) || new Date().toISOString().slice(0, 10),
+    valor_total: valorTotal,
+    transportadora: pedido.frete?.nome_transportador || null,
+    codigo_rastreio: pedido.frete?.codigo_rastreio || null,
+    previsao_entrega: parseDateBR(pedido.frete?.previsao_entrega),
+    status_entrega: "EMITIDA",
+    codigo_pedido_omie: codigoPedido,
+    dados_omie: pedido,
+    updated_at: new Date().toISOString(),
+  };
+
+  let nfId;
+  if (Array.isArray(existing) && existing[0]?.id) {
+    nfId = existing[0].id;
+    await sbFetch(`/rest/v1/sac_notas_fiscais?id=eq.${nfId}`, {
+      method: "PATCH",
+      body: JSON.stringify(nfBody),
+    });
+  } else {
+    const nfR = await sbFetch("/rest/v1/sac_notas_fiscais", {
+      method: "POST",
+      body: JSON.stringify(nfBody),
+    });
+    const nfRows = await nfR.json().catch(() => []);
+    nfId = Array.isArray(nfRows) && nfRows[0]?.id ? nfRows[0].id : null;
+  }
+
+  // 5. Fluxo OODA — Classe A: WhatsApp VIP imediato
+  if (nfId && classeAbc === "A" && telefone) {
+    const nome = cli.nome_fantasia || cli.razao_social || "Cliente";
+    const msg = `Olá, ${nome}! 👋\n\nSou da equipe VerticalParts. Sua NF *${nfNumero}* foi emitida e está sendo preparada para envio.${nfBody.codigo_rastreio ? `\n\n📦 Rastreio: *${nfBody.codigo_rastreio}*` : ""}\n\nEstamos à disposição para qualquer dúvida! 🙂`;
+    const ok = await enviarWhatsAppSac(telefone, msg);
+    await registrarLogSac(nfId, "WHATSAPP", "VIP_FOLLOWUP", telefone, msg, ok);
+  }
+
+  console.log(`[sac/omie] pedido ${codigoPedido} → NF ${nfNumero} classe ${classeAbc} (nf_id=${nfId})`);
+  return { nfId, nfNumero, classeAbc };
+}
+
+async function handleOmieWebhook(req, res) {
+  const json = (status, obj) => {
+    res.statusCode = status;
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify(obj));
+  };
+
+  if (req.method === "GET") return json(200, { status: "ok", service: "posvenda360-omie-webhook" });
+  if (req.method !== "POST") return json(405, { error: "Method Not Allowed" });
+
+  let payload;
+  try { payload = JSON.parse(await readBody(req)); }
+  catch { return json(400, { error: "Invalid JSON" }); }
+
+  console.log("[sac/omie] webhook:", JSON.stringify(payload).slice(0, 400));
+
+  // Omie envia { ping: "omie" } para validar a URL no cadastro do webhook
+  if (payload.ping) return json(200, { ping: payload.ping });
+
+  // Validar appKey quando presente no payload
+  if (payload.appKey && String(payload.appKey) !== OMIE_APP_KEY()) {
+    console.warn("[sac/omie] appKey inválida:", String(payload.appKey).slice(0, 6));
+    return json(401, { error: "Unauthorized" });
+  }
+
+  // Extrair código do pedido — Omie varia o formato conforme o tópico do evento
+  const ev = payload.event || payload.pedido || payload;
+  const codigoPedido =
+    ev.codigo_pedido ?? ev.idPedido ?? ev.nCodPed ?? ev.id_pedido ?? null;
+
+  if (!codigoPedido) {
+    console.log("[sac/omie] evento sem codigo_pedido — topic:", payload.topic || "?");
+    return json(200, { ok: true, skipped: true });
+  }
+
+  // Responde 200 imediatamente; processa em background (Omie tem timeout curto)
+  json(200, { ok: true, processing: codigoPedido });
+  try {
+    await ingerirPedidoOmie(Number(codigoPedido));
+  } catch (e) {
+    console.error("[sac/omie] erro ao ingerir pedido:", e.message);
+  }
+}
+
+async function handleSacEnviarPesquisa(req, res) {
+  const json = (status, obj) => {
+    res.statusCode = status;
+    res.setHeader("Content-Type", "application/json");
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.end(JSON.stringify(obj));
+  };
+
+  if (req.method === "OPTIONS") {
+    res.statusCode = 204;
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+    return res.end();
+  }
+  if (req.method !== "POST") return json(405, { error: "Method Not Allowed" });
+
+  let payload;
+  try { payload = JSON.parse(await readBody(req)); }
+  catch { return json(400, { error: "Invalid JSON" }); }
+
+  const nfId = payload?.nf_id;
+  if (!nfId) return json(400, { error: "nf_id é obrigatório" });
+
+  // Buscar NF + cliente
+  const nfRows = await sbFetch(
+    `/rest/v1/sac_notas_fiscais?id=eq.${encodeURIComponent(nfId)}&select=*,sac_clientes(nome_fantasia,razao_social,whatsapp,telefone)&limit=1`,
+    { method: "GET" },
+  ).then((r) => r.json()).catch(() => []);
+  const nf = Array.isArray(nfRows) ? nfRows[0] : null;
+  if (!nf) return json(404, { error: "NF não encontrada" });
+
+  // Criar registro de pesquisa (token gerado pelo default do banco)
+  const pesqR = await sbFetch("/rest/v1/sac_pesquisas", {
+    method: "POST",
+    body: JSON.stringify({ nf_id: nfId }),
+  });
+  const pesqRows = await pesqR.json().catch(() => []);
+  const token = Array.isArray(pesqRows) && pesqRows[0]?.token ? pesqRows[0].token : null;
+
+  const cliente = nf.sac_clientes || {};
+  const fone = cliente.whatsapp || cliente.telefone;
+  const nome = cliente.nome_fantasia || cliente.razao_social || nf.razao_social_cliente || "Cliente";
+
+  let enviado = false;
+  if (fone && token) {
+    const url = `https://posvenda360.vpsistema.com/nps/form/${token}`;
+    const msg = `Olá, ${nome}! 😊\n\nSua entrega referente à NF *${nf.nf_numero}* foi concluída.\n\nGostaríamos muito de saber sua opinião. Leva menos de 1 minuto:\n👉 ${url}\n\nObrigado pela parceria! — VerticalParts`;
+    enviado = await enviarWhatsAppSac(fone, msg);
+    await registrarLogSac(nfId, "WHATSAPP", "PESQUISA", fone, msg, enviado);
+  }
+
+  await sbFetch(`/rest/v1/sac_notas_fiscais?id=eq.${encodeURIComponent(nfId)}`, {
+    method: "PATCH",
+    body: JSON.stringify({ pesquisa_enviada: true, pesquisa_enviada_em: new Date().toISOString() }),
+  });
+
+  return json(200, { ok: true, enviado, token });
+}
+
 const server = http.createServer(async (req, res) => {
   try {
     const urlPath = new URL(req.url || "/", "http://localhost").pathname;
@@ -1265,6 +1526,14 @@ const server = http.createServer(async (req, res) => {
       if (req.method === "POST")   { await handleLidAgendaUpsert(req, res); return; }
       if (req.method === "DELETE") { await handleLidAgendaDelete(req, res); return; }
       res.statusCode = 405; res.end("Method Not Allowed"); return;
+    }
+    if (urlPath === "/api/webhooks/omie") {
+      await handleOmieWebhook(req, res);
+      return;
+    }
+    if (urlPath === "/api/sac/enviar-pesquisa") {
+      await handleSacEnviarPesquisa(req, res);
+      return;
     }
 
     const filePath = join(clientDir, urlPath);
