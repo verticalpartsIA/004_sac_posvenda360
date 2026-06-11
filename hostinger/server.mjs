@@ -1253,7 +1253,7 @@ async function registrarLogSac(nfId, canal, tipo, destinatario, conteudo, ok) {
 }
 
 // Ingestão: pedido Omie → sac_clientes + sac_notas_fiscais + fluxo VIP
-async function ingerirPedidoOmie(codigoPedido) {
+async function ingerirPedidoOmie(codigoPedido, { skipNotify = false } = {}) {
   // 1. Consultar pedido completo no Omie
   const pedidoResp = await omieCall("produtos/pedido", "ConsultarPedido", { codigo_pedido: codigoPedido });
   const pedido = pedidoResp.pedido_venda_produto;
@@ -1331,8 +1331,8 @@ async function ingerirPedidoOmie(codigoPedido) {
     nfId = Array.isArray(nfRows) && nfRows[0]?.id ? nfRows[0].id : null;
   }
 
-  // 5. Fluxo OODA — Classe A: WhatsApp VIP imediato
-  if (nfId && classeAbc === "A" && telefone) {
+  // 5. Fluxo OODA — Classe A: WhatsApp VIP imediato (pulado no backfill histórico)
+  if (!skipNotify && nfId && classeAbc === "A" && telefone) {
     const nome = cli.nome_fantasia || cli.razao_social || "Cliente";
     const msg = `Olá, ${nome}! 👋\n\nSou da equipe VerticalParts. Sua NF *${nfNumero}* foi emitida e está sendo preparada para envio.${nfBody.codigo_rastreio ? `\n\n📦 Rastreio: *${nfBody.codigo_rastreio}*` : ""}\n\nEstamos à disposição para qualquer dúvida! 🙂`;
     const ok = await enviarWhatsAppSac(telefone, msg);
@@ -1369,8 +1369,12 @@ async function handleOmieWebhook(req, res) {
   }
 
   // Extrair código do pedido — Omie varia o formato conforme o tópico do evento
-  const ev = payload.event || payload.pedido || payload;
+  // payload.event pode ser string (nome do evento) ou objeto com os dados — só usa como ev se for objeto
+  const ev = (payload.event && typeof payload.event === "object" ? payload.event : null)
+    || (payload.pedido && typeof payload.pedido === "object" ? payload.pedido : null)
+    || payload;
   const codigoPedido =
+    payload.codigo_pedido ?? payload.nCodPed ?? payload.id_pedido ??
     ev.codigo_pedido ?? ev.idPedido ?? ev.nCodPed ?? ev.id_pedido ?? null;
 
   if (!codigoPedido) {
@@ -1445,6 +1449,90 @@ async function handleSacEnviarPesquisa(req, res) {
   });
 
   return json(200, { ok: true, enviado, token });
+}
+
+// ─── SAC — Backfill histórico de NFs do Omie ─────────────────────────────────
+// POST /api/sac/backfill
+// Body (opcional): { "data_de": "01/05/2026", "data_ate": "11/06/2026" }
+// Busca pedidos faturados (etapa=60) no Omie e ingere no sac_notas_fiscais.
+// Idempotente: se a NF já existe, faz PATCH. Não envia WhatsApp (skipNotify).
+
+async function handleSacBackfill(req, res) {
+  const json = (s, o) => {
+    res.statusCode = s;
+    res.setHeader("Content-Type", "application/json");
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.end(JSON.stringify(o));
+  };
+  if (req.method === "OPTIONS") {
+    res.statusCode = 204;
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+    return res.end();
+  }
+  if (req.method !== "POST") return json(405, { error: "Method Not Allowed" });
+
+  let body = {};
+  try { body = JSON.parse(await readBody(req)); } catch { /* body opcional */ }
+
+  const dataDe  = body.data_de  || "01/05/2026";
+  const dataAte = body.data_ate || (() => {
+    const d = new Date();
+    return `${String(d.getDate()).padStart(2,"0")}/${String(d.getMonth()+1).padStart(2,"0")}/${d.getFullYear()}`;
+  })();
+
+  // Responde 200 imediatamente e processa em background
+  json(200, { ok: true, iniciado: true, data_de: dataDe, data_ate: dataAte,
+    message: "Backfill iniciado. Acompanhe pelo log do servidor (pm2 logs)." });
+
+  setImmediate(async () => {
+    const stats = { total: 0, processed: 0, skipped: 0, errors: [] };
+    try {
+      let pagina = 1;
+      let totalPaginas = 1;
+
+      while (pagina <= totalPaginas && pagina <= 20) {
+        let data;
+        try {
+          data = await omieCall("produtos/pedido", "ListarPedidos", {
+            pagina,
+            registros_por_pagina: 50,
+            apenas_importado_api: "N",
+            etapa: "60",
+            filtrar_por_data_de: dataDe,
+            filtrar_por_data_ate: dataAte,
+          });
+        } catch (e) {
+          console.error(`[backfill] erro ListarPedidos pág.${pagina}:`, e.message);
+          break;
+        }
+
+        totalPaginas = data.total_de_paginas ?? data.nTotPag ?? 1;
+        const pedidos = data.pedido ?? data.pedidos ?? [];
+        console.log(`[backfill] pág.${pagina}/${totalPaginas} — ${pedidos.length} pedidos (etapa 60)`);
+
+        for (const ped of pedidos) {
+          const codigoPedido = ped.cabecalho?.codigo_pedido;
+          if (!codigoPedido) { stats.skipped++; continue; }
+          stats.total++;
+          try {
+            await ingerirPedidoOmie(Number(codigoPedido), { skipNotify: true });
+            stats.processed++;
+          } catch (e) {
+            stats.errors.push({ codigo_pedido: codigoPedido, error: e.message });
+            console.error(`[backfill] erro pedido ${codigoPedido}:`, e.message);
+          }
+          // Intervalo entre chamadas para não sobrecarregar a API Omie
+          await new Promise(r => setTimeout(r, 150));
+        }
+        pagina++;
+      }
+    } catch (e) {
+      console.error("[backfill] erro geral:", e.message);
+    }
+    console.log("[backfill] ✅ concluído:", JSON.stringify(stats));
+  });
 }
 
 const server = http.createServer(async (req, res) => {
@@ -1533,6 +1621,10 @@ const server = http.createServer(async (req, res) => {
     }
     if (urlPath === "/api/sac/enviar-pesquisa") {
       await handleSacEnviarPesquisa(req, res);
+      return;
+    }
+    if (urlPath === "/api/sac/backfill") {
+      await handleSacBackfill(req, res);
       return;
     }
 
