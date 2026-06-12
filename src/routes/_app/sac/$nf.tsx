@@ -285,6 +285,13 @@ export default function SacNFDetalhe() {
       responsavel_pos_venda: sac.responsavel_pos_venda || null,
       updated_at: new Date().toISOString(),
     }).eq("id", nfId);
+    if (!error && sac.status_pos_venda === "CONCLUIDO") {
+      await fetch("/api/sac/vpclick-concluir", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ nf_id: nfId }),
+      }).catch(() => {});
+    }
     setMsgSac(error ? "Erro ao salvar." : "Salvo com sucesso!");
     setSavingSac(false);
   }

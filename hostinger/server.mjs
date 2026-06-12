@@ -13,6 +13,29 @@ const SB_URL          = "https://jkbklzlbhhfnamaeislb.supabase.co";
 const SB_SERVICE_KEY  = () =>
   process.env.SUPABASE_SERVICE_ROLE_KEY ||
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImprYmtsemxiaGhmbmFtYWVpc2xiIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3Nzc5MDM5MywiZXhwIjoyMDkzMzY2MzkzfQ.WoFDfpykUrwQcg0uzDwgfKSwWCy-7zrrJGWGOpo5drs";
+
+// ─── VP Click (Supabase) ──────────────────────────────────────────────────────
+const VC_URL = "https://sfpnjwllcmentoocylow.supabase.co";
+const VC_SERVICE_KEY  = () =>
+  process.env.VPCLICK_SERVICE_KEY ||
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNmcG5qd2xsY21lbnRvb2N5bG93Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NzQ4NDg1MSwiZXhwIjoyMDkzMDYwODUxfQ.DB5TB5VsCa-LNnoeXgfUAaPbicwlXsguK0KPdR2LArE";
+const VC_LIST_TICKETS   = "44400000-0000-4000-8000-000000000004"; // VP PÓS-VENDA > Atendimento > Tickets
+const VC_TEAM_EXPEDICAO = "a0236505-22dc-46c8-b95c-c67346fe74cf";
+const VC_TEAM_POS_VENDA = "0096f24e-185d-486c-a877-0db4190f7116";
+
+function vcFetch(path, opts = {}) {
+  const key = VC_SERVICE_KEY();
+  return fetch(`${VC_URL}${path}`, {
+    ...opts,
+    headers: {
+      "Content-Type": "application/json",
+      "apikey": key,
+      "Authorization": `Bearer ${key}`,
+      "Prefer": "return=representation",
+      ...(opts.headers || {}),
+    },
+  });
+}
 const ANTHROPIC_KEY   = () => process.env.ANTHROPIC_API_KEY || "";
 const CLAUDE_MODEL    = () => process.env.HERMES_MODEL || "claude-haiku-4-5";
 const NOTIFY_URL      = () => process.env.NOTIFY_WEBHOOK_URL || ""; // n8n / Slack / Telegram
@@ -1252,6 +1275,99 @@ async function registrarLogSac(nfId, canal, tipo, destinatario, conteudo, ok) {
   }).catch((e) => console.error("[sac] log error:", e.message));
 }
 
+// +N dias úteis (pula sábado e domingo)
+function adicionarDiasUteis(dataISO, dias) {
+  const d = new Date(dataISO + "T12:00:00");
+  let adicionados = 0;
+  while (adicionados < dias) {
+    d.setDate(d.getDate() + 1);
+    const dow = d.getDay();
+    if (dow !== 0 && dow !== 6) adicionados++;
+  }
+  return d.toISOString().slice(0, 10);
+}
+
+// Trigger 1: cria tarefa "Expedição" no VP Click e menciona @expedição
+async function createVpClickTaskExpedicao(nfId, numeroPedido, razaoSocial, previsaoEntrega) {
+  try {
+    // Evita duplicata
+    const existR = await vcFetch(
+      `/rest/v1/vpclick_integration_links?source_project=eq.pv360&source_table=eq.sac_notas_fiscais&source_record_id=eq.${nfId}&limit=1`,
+      { method: "GET" }
+    );
+    const existRows = await existR.json().catch(() => []);
+    if (Array.isArray(existRows) && existRows.length > 0) {
+      return existRows[0].vpclick_task_id;
+    }
+
+    const taskR = await vcFetch("/rest/v1/tasks", {
+      method: "POST",
+      body: JSON.stringify({
+        title: `Expedição — Pedido ${numeroPedido} | ${razaoSocial}`,
+        description: `Pedido ${numeroPedido} faturado. Confirmar dados de expedição no VP Pós-Venda 360.`,
+        list_id: VC_LIST_TICKETS,
+        status: "Aberto",
+        priority: "Media",
+        due_date: previsaoEntrega || null,
+        tags: ["expedicao", "pv360"],
+      }),
+    });
+    const taskRows = await taskR.json().catch(() => []);
+    const taskId = Array.isArray(taskRows) && taskRows[0]?.id ? taskRows[0].id : null;
+    if (!taskId) { console.error("[vpclick] falha ao criar tarefa:", JSON.stringify(taskRows).slice(0,200)); return null; }
+
+    await vcFetch("/rest/v1/vpclick_integration_links", {
+      method: "POST",
+      body: JSON.stringify({
+        source_project: "pv360", source_table: "sac_notas_fiscais",
+        source_record_id: nfId, vpclick_task_id: taskId, vpclick_list_id: VC_LIST_TICKETS,
+      }),
+    }).catch((e) => console.error("[vpclick] integration link:", e.message));
+
+    const membersR = await vcFetch(`/rest/v1/team_members?team_id=eq.${VC_TEAM_EXPEDICAO}&select=user_id`, { method: "GET" });
+    const members = await membersR.json().catch(() => []);
+    if (Array.isArray(members) && members.length > 0) {
+      await vcFetch("/rest/v1/notifications", {
+        method: "POST",
+        body: JSON.stringify(members.map((m) => ({
+          user_id: m.user_id, type: "team_mention",
+          title: `@Expedição — Pedido ${numeroPedido}`,
+          body: `${razaoSocial} — Confirmar expedição no VP Pós-Venda 360`,
+          task_id: taskId,
+        }))),
+      }).catch((e) => console.error("[vpclick] notificações:", e.message));
+    }
+
+    console.log(`[vpclick] tarefa expedição criada: ${taskId} (NF ${nfId})`);
+    return taskId;
+  } catch (e) {
+    console.error("[vpclick] createVpClickTaskExpedicao:", e.message);
+    return null;
+  }
+}
+
+// Trigger 3: marca tarefa VP Click como Concluído
+async function concluirVpClickTask(nfId) {
+  try {
+    const linkR = await vcFetch(
+      `/rest/v1/vpclick_integration_links?source_project=eq.pv360&source_table=eq.sac_notas_fiscais&source_record_id=eq.${nfId}&order=created_at.desc&limit=1`,
+      { method: "GET" }
+    );
+    const links = await linkR.json().catch(() => []);
+    const taskId = Array.isArray(links) && links[0]?.vpclick_task_id ? links[0].vpclick_task_id : null;
+    if (!taskId) { console.warn("[vpclick] sem tarefa para NF:", nfId); return false; }
+    await vcFetch(`/rest/v1/tasks?id=eq.${taskId}`, {
+      method: "PATCH",
+      body: JSON.stringify({ status: "Concluído" }),
+    });
+    console.log(`[vpclick] tarefa ${taskId} → Concluído`);
+    return true;
+  } catch (e) {
+    console.error("[vpclick] concluirVpClickTask:", e.message);
+    return false;
+  }
+}
+
 // Ingestão: pedido Omie → sac_clientes + sac_notas_fiscais + fluxo VIP
 async function ingerirPedidoOmie(codigoPedido, { skipNotify = false } = {}) {
   // 1. Consultar pedido completo no Omie
@@ -1343,6 +1459,11 @@ async function ingerirPedidoOmie(codigoPedido, { skipNotify = false } = {}) {
     const msg = `Olá, ${nome}! 👋\n\nSou da equipe VerticalParts. Sua NF *${nfNumero}* foi emitida e está sendo preparada para envio.${nfBody.codigo_rastreio ? `\n\n📦 Rastreio: *${nfBody.codigo_rastreio}*` : ""}\n\nEstamos à disposição para qualquer dúvida! 🙂`;
     const ok = await enviarWhatsAppSac(telefone, msg);
     await registrarLogSac(nfId, "WHATSAPP", "VIP_FOLLOWUP", telefone, msg, ok);
+  }
+
+  // 6. Trigger 1 VP Click: tarefa Expedição + @expedição (não executa no backfill)
+  if (!skipNotify && nfId) {
+    void createVpClickTaskExpedicao(nfId, nfBody.numero_pedido_omie || String(codigoPedido), cli.razao_social || "—", nfBody.previsao_entrega);
   }
 
   console.log(`[sac/omie] pedido ${codigoPedido} → NF ${nfNumero} classe ${classeAbc} (nf_id=${nfId})`);
@@ -1443,6 +1564,11 @@ async function ingerirNFOmie(nfData, { skipNotify = false } = {}) {
     const msg = `Olá, ${nome}! 👋\n\nSou da equipe VerticalParts. Sua NF *${nfNumero}* foi emitida e está sendo preparada para envio.\n\nEstamos à disposição para qualquer dúvida! 🙂`;
     const ok = await enviarWhatsAppSac(telefone, msg);
     await registrarLogSac(nfId, "WHATSAPP", "VIP_FOLLOWUP", telefone, msg, ok);
+  }
+
+  // Trigger 1 VP Click: tarefa Expedição + @expedição (não executa no backfill)
+  if (!skipNotify && nfId) {
+    void createVpClickTaskExpedicao(nfId, nfBody.numero_pedido_omie || nfNumero, razaoSocial, nfBody.previsao_entrega);
   }
 
   console.log(`[sac/nf] NF ${nfNumero} | ${razaoSocial} | ${classeAbc} | R$${valorTotal} (nf_id=${nfId})`);
@@ -1716,6 +1842,31 @@ async function handleSacOmieObs(req, res) {
   }
 }
 
+// POST /api/sac/vpclick-concluir — Trigger 3: marca tarefa VP Click como Concluído
+async function handleVpClickConcluir(req, res) {
+  const json = (s, o) => {
+    res.statusCode = s;
+    res.setHeader("Content-Type", "application/json");
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.end(JSON.stringify(o));
+  };
+  if (req.method === "OPTIONS") {
+    res.statusCode = 204;
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+    return res.end();
+  }
+  if (req.method !== "POST") return json(405, { error: "Method not allowed" });
+  let body;
+  try { body = JSON.parse(await readBody(req)); }
+  catch { return json(400, { error: "Invalid JSON" }); }
+  const { nf_id } = body || {};
+  if (!nf_id) return json(400, { error: "Missing nf_id" });
+  const ok = await concluirVpClickTask(nf_id);
+  return json(200, { ok });
+}
+
 // POST /api/sac/backfill
 // Body (opcional): { "data_de": "01/05/2026", "data_ate": "11/06/2026" }
 // Busca pedidos faturados (etapa=60) no Omie e ingere no sac_notas_fiscais.
@@ -1889,6 +2040,10 @@ const server = http.createServer(async (req, res) => {
     }
     if (urlPath === "/api/sac/omie-obs") {
       await handleSacOmieObs(req, res);
+      return;
+    }
+    if (urlPath === "/api/sac/vpclick-concluir") {
+      await handleVpClickConcluir(req, res);
       return;
     }
     if (urlPath === "/api/sac/backfill") {
