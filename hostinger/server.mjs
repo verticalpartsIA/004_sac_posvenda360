@@ -1874,6 +1874,80 @@ async function handleVpClickConcluir(req, res) {
   return json(200, { ok });
 }
 
+// POST /api/sac/expedicao-divergencia — Salva conferência de itens e notifica VP Click
+async function handleExpedicaoDivergencia(req, res) {
+  const json = (s, o) => {
+    res.statusCode = s;
+    res.setHeader("Content-Type", "application/json");
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.end(JSON.stringify(o));
+  };
+  if (req.method === "OPTIONS") {
+    res.statusCode = 204;
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+    return res.end();
+  }
+  if (req.method !== "POST") return json(405, { error: "Method not allowed" });
+  let body;
+  try { body = JSON.parse(await readBody(req)); }
+  catch { return json(400, { error: "Invalid JSON" }); }
+  const { nf_id, itens, obs_divergencia } = body || {};
+  if (!nf_id || !Array.isArray(itens)) return json(400, { error: "Missing nf_id or itens" });
+
+  const rows = itens.map((item) => ({
+    nf_id,
+    item_idx: item.item_idx,
+    sku: item.sku || null,
+    descricao: item.descricao || null,
+    qtd_pedida: item.qtd_pedida,
+    qtd_conferida: item.qtd_conferida,
+    divergencia_tipo: item.divergencia_tipo || null,
+    obs_divergencia: obs_divergencia || null,
+    conferido_em: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  }));
+
+  const upsertRes = await sbFetch(
+    `/rest/v1/expedicao_conferencias?on_conflict=nf_id%2Citem_idx`,
+    { method: "POST", headers: { "Prefer": "resolution=merge-duplicates,return=representation" }, body: JSON.stringify(rows) }
+  );
+  if (!upsertRes.ok) {
+    const err = await upsertRes.text();
+    console.error("[expedicao-divergencia] upsert error:", err);
+    return json(500, { error: "Erro ao salvar conferências" });
+  }
+
+  // Notifica VP Click — adiciona comentário na tarefa vinculada
+  try {
+    const linkRes = await sbFetch(`/rest/v1/vpclick_integration_links?nf_id=eq.${encodeURIComponent(nf_id)}&select=task_id&limit=1`);
+    if (linkRes.ok) {
+      const links = await linkRes.json();
+      const taskId = links?.[0]?.task_id;
+      if (taskId) {
+        const itensDivergentes = itens.filter((i) => i.divergencia_tipo);
+        const linhasDiv = itensDivergentes.map((i) =>
+          `• ${i.descricao || i.sku || `Item ${i.item_idx + 1}`}: pedido ${i.qtd_pedida}, conferido ${i.qtd_conferida} (${i.divergencia_tipo})`
+        ).join("\n");
+        const comentario = `⚠️ DIVERGÊNCIA NA EXPEDIÇÃO\n${linhasDiv}${obs_divergencia ? `\nObs: ${obs_divergencia}` : ""}`;
+        await vcFetch(`/rest/v1/task_comments`, {
+          method: "POST",
+          body: JSON.stringify({ task_id: taskId, body: comentario, author_id: null }),
+        });
+        await vcFetch(`/rest/v1/tasks?id=eq.${encodeURIComponent(taskId)}`, {
+          method: "PATCH",
+          body: JSON.stringify({ status: "aguardando_interno", updated_at: new Date().toISOString() }),
+        });
+      }
+    }
+  } catch (e) {
+    console.error("[expedicao-divergencia] VP Click notify error:", e);
+  }
+
+  return json(200, { ok: true });
+}
+
 // POST /api/sac/backfill
 // Body (opcional): { "data_de": "01/05/2026", "data_ate": "11/06/2026" }
 // Busca pedidos faturados (etapa=60) no Omie e ingere no sac_notas_fiscais.
@@ -2051,6 +2125,10 @@ const server = http.createServer(async (req, res) => {
     }
     if (urlPath === "/api/sac/vpclick-concluir") {
       await handleVpClickConcluir(req, res);
+      return;
+    }
+    if (urlPath === "/api/sac/expedicao-divergencia") {
+      await handleExpedicaoDivergencia(req, res);
       return;
     }
     if (urlPath === "/api/sac/backfill") {

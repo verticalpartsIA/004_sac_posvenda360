@@ -2,7 +2,7 @@ import { createFileRoute, useParams, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
-import { ArrowLeft, Save, Truck, MessageCircle, Phone, CheckCircle2, Clock, Package, AlertTriangle, Send, Eye, EyeOff } from "lucide-react";
+import { ArrowLeft, Save, Truck, MessageCircle, Phone, CheckCircle2, Clock, Package, AlertTriangle, Send, Eye, EyeOff, ClipboardList } from "lucide-react";
 
 export const Route = createFileRoute("/_app/sac/$nf")({
   component: SacNFDetalhe,
@@ -39,6 +39,14 @@ type NFDetalhe = {
     telefone: string | null;
     contato: string | null;
   } | null;
+};
+
+type OmieItem = {
+  produto?: {
+    codigo_produto?: string;
+    descricao?: string;
+    quantidade?: number;
+  };
 };
 
 type Pesquisa = {
@@ -169,13 +177,20 @@ export default function SacNFDetalhe() {
   const [savingObs, setSavingObs] = useState(false);
   const [msgObs, setMsgObs] = useState("");
 
+  // Conferência de itens (Poka-Yoke)
+  const [conferencias, setConferencias] = useState<Record<number, number | null>>({});
+  const [obsDiv, setObsDiv] = useState("");
+  const [divergenciaReportada, setDivergenciaReportada] = useState(false);
+  const [reportandoDiv, setReportandoDiv] = useState(false);
+  const [msgDiv, setMsgDiv] = useState("");
+
   useEffect(() => { void carregar(); }, [nfId]);
 
   async function carregar() {
     setLoading(true);
     const [{ data: nfData }, { data: pesquisaData }] = await Promise.all([
       supabase.from("sac_notas_fiscais")
-        .select("*, obs_omie, sac_clientes(nome_fantasia,whatsapp,email,telefone,contato)")
+        .select("*, obs_omie, dados_omie, sac_clientes(nome_fantasia,whatsapp,email,telefone,contato)")
         .eq("id", nfId).single(),
       supabase.from("sac_pesquisas").select("*").eq("nf_id", nfId).maybeSingle(),
     ]);
@@ -231,6 +246,17 @@ export default function SacNFDetalhe() {
   }
 
   async function salvarExpedicao() {
+    // Poka-Yoke: bloqueia se conferência incompleta ou divergência não reportada
+    const itensGuard = ((nf as any)?.dados_omie?.det ?? []) as OmieItem[];
+    if (itensGuard.length > 0) {
+      const todasOk = itensGuard.every((_, i) => conferencias[i] != null);
+      const temDivGuard = itensGuard.some((item, i) => {
+        const qtd = item.produto?.quantidade ?? 0;
+        return conferencias[i] != null && conferencias[i] !== qtd;
+      });
+      if (!todasOk) { setMsgExp("Confira todos os itens antes de salvar."); return; }
+      if (temDivGuard && !divergenciaReportada) { setMsgExp("Reporte a divergência antes de salvar."); return; }
+    }
     setSavingExp(true);
     setMsgExp("");
     const { error } = await supabase.from("sac_notas_fiscais").update({
@@ -314,6 +340,38 @@ export default function SacNFDetalhe() {
     setSavingObs(false);
   }
 
+  async function reportarDivergencia() {
+    setReportandoDiv(true);
+    setMsgDiv("");
+    const itens = ((nf as any)?.dados_omie?.det ?? []) as OmieItem[];
+    const payload = itens.map((item, i) => {
+      const qtdPedida = item.produto?.quantidade ?? 0;
+      const qtdConf = conferencias[i] ?? 0;
+      let divergencia_tipo: string | null = null;
+      if (qtdConf !== qtdPedida) {
+        divergencia_tipo = qtdConf === 0 ? "ZERADO" : qtdConf > qtdPedida ? "EXCESSO" : "FALTA";
+      }
+      return {
+        item_idx: i,
+        sku: item.produto?.codigo_produto ?? null,
+        descricao: item.produto?.descricao ?? null,
+        qtd_pedida: qtdPedida,
+        qtd_conferida: qtdConf,
+        divergencia_tipo,
+      };
+    });
+    try {
+      const res = await fetch("/api/sac/expedicao-divergencia", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ nf_id: nfId, itens: payload, obs_divergencia: obsDiv }),
+      });
+      if (!res.ok) { setMsgDiv("Erro ao reportar divergência."); }
+      else { setDivergenciaReportada(true); setMsgDiv("Divergência reportada — time notificado."); }
+    } catch { setMsgDiv("Erro de conexão."); }
+    setReportandoDiv(false);
+  }
+
   async function salvarPesquisa() {
     setSavingPesq(true);
     setMsgPesq("");
@@ -341,6 +399,13 @@ export default function SacNFDetalhe() {
 
   if (loading) return <div className="py-20 text-center text-muted-foreground text-sm">Carregando...</div>;
   if (!nf) return <div className="py-20 text-center text-muted-foreground text-sm">NF não encontrada.</div>;
+
+  const itensOmie = ((nf as any).dados_omie?.det ?? []) as OmieItem[];
+  const todasPreenchidas = itensOmie.length === 0 || itensOmie.every((_, i) => conferencias[i] != null);
+  const temDivergencia = itensOmie.some((item, i) => {
+    const qtd = item.produto?.quantidade ?? 0;
+    return conferencias[i] != null && conferencias[i] !== qtd;
+  });
 
   const cfg = STATUS_CONFIG[nf.status_entrega];
   const StatusIcon = cfg.icon;
@@ -443,6 +508,120 @@ export default function SacNFDetalhe() {
           {msgContato && <span className="text-xs text-muted-foreground">{msgContato}</span>}
         </div>
       </div>
+
+      {/* ─── POKA-YOKE: CONFERÊNCIA DE ITENS ─── */}
+      {itensOmie.length > 0 && (
+        <div className="rounded-xl border bg-card overflow-hidden">
+          <div className="flex items-center gap-2 border-b bg-purple-50 px-5 py-3">
+            <ClipboardList className="h-4 w-4 text-purple-700" />
+            <h2 className="text-sm font-semibold text-purple-800">Conferência de Itens — Poka-Yoke</h2>
+            <span className="ml-auto text-xs text-muted-foreground">
+              {Object.values(conferencias).filter((v) => v != null).length} / {itensOmie.length} conferidos
+            </span>
+          </div>
+          <div className="p-5 space-y-3">
+            {/* Obs vendedor/cliente */}
+            {nf.obs_omie && (
+              <div className="text-xs bg-amber-50 border border-amber-200 rounded-lg p-3">
+                <span className="font-medium text-amber-700">Obs. vendedor/cliente: </span>
+                <span className="text-amber-900">{nf.obs_omie}</span>
+              </div>
+            )}
+            {/* Cabeçalho da tabela */}
+            <div className="grid grid-cols-[1fr_72px_88px_44px] gap-2 text-[10px] font-medium text-muted-foreground uppercase tracking-wide pb-1 border-b">
+              <span>Produto</span>
+              <span className="text-center">Pedido</span>
+              <span className="text-center">Conferido</span>
+              <span />
+            </div>
+            {/* Itens */}
+            {itensOmie.map((item, i) => {
+              const qtdPedida = item.produto?.quantidade ?? 0;
+              const qtdConf = conferencias[i];
+              const preenchido = qtdConf != null;
+              const ok = preenchido && qtdConf === qtdPedida;
+              const div = preenchido && qtdConf !== qtdPedida;
+              return (
+                <div key={i} className="grid grid-cols-[1fr_72px_88px_44px] gap-2 items-center py-2 border-b last:border-0">
+                  <div>
+                    <p className="text-sm font-medium leading-tight">{item.produto?.descricao ?? `Item ${i + 1}`}</p>
+                    {item.produto?.codigo_produto && (
+                      <p className="text-[11px] text-muted-foreground font-mono">SKU {item.produto.codigo_produto}</p>
+                    )}
+                  </div>
+                  <span className="text-center text-sm tabular-nums">{qtdPedida}</span>
+                  <input
+                    type="number"
+                    min={0}
+                    value={qtdConf ?? ""}
+                    placeholder="—"
+                    onChange={(e) => {
+                      const v = e.target.value === "" ? null : Number(e.target.value);
+                      setConferencias((prev) => ({ ...prev, [i]: v }));
+                      if (divergenciaReportada) setDivergenciaReportada(false);
+                    }}
+                    className={cn(
+                      "w-full rounded-lg border px-2 py-1.5 text-sm text-center tabular-nums focus:outline-none focus:ring-1",
+                      ok && "border-green-400 bg-green-50 text-green-800 focus:ring-green-400",
+                      div && "border-red-400 bg-red-50 text-red-800 focus:ring-red-400",
+                      !preenchido && "border-border bg-background focus:ring-ring"
+                    )}
+                  />
+                  <div className="flex justify-center">
+                    {ok && <CheckCircle2 className="h-5 w-5 text-green-500" />}
+                    {div && <AlertTriangle className="h-5 w-5 text-red-500" />}
+                  </div>
+                </div>
+              );
+            })}
+            {/* Bloco de divergência */}
+            {temDivergencia && (
+              <div className={cn(
+                "rounded-lg border p-3 space-y-2",
+                divergenciaReportada ? "border-amber-300 bg-amber-50" : "border-red-300 bg-red-50"
+              )}>
+                {!divergenciaReportada ? (
+                  <>
+                    <p className="text-sm font-medium text-red-800 flex items-center gap-1.5">
+                      <AlertTriangle className="h-4 w-4" /> Divergência detectada — reporte antes de salvar
+                    </p>
+                    <textarea
+                      rows={2}
+                      value={obsDiv}
+                      onChange={(e) => setObsDiv(e.target.value)}
+                      placeholder="Descreva a divergência (opcional)"
+                      className="w-full rounded-lg border bg-white px-3 py-2 text-sm resize-none focus:outline-none focus:ring-1 focus:ring-red-400"
+                    />
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={reportarDivergencia}
+                        disabled={reportandoDiv}
+                        className="inline-flex items-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50"
+                      >
+                        <Send className="h-4 w-4" />
+                        {reportandoDiv ? "Reportando..." : "Reportar Divergência"}
+                      </button>
+                      {msgDiv && <span className="text-xs text-muted-foreground">{msgDiv}</span>}
+                    </div>
+                  </>
+                ) : (
+                  <p className="text-sm text-amber-800 flex items-center gap-1.5">
+                    <CheckCircle2 className="h-4 w-4 text-amber-600" />
+                    Divergência reportada — time notificado. Pode salvar com ressalva.
+                  </p>
+                )}
+              </div>
+            )}
+            {/* Tudo OK */}
+            {todasPreenchidas && !temDivergencia && (
+              <div className="rounded-lg border border-green-300 bg-green-50 p-3 flex items-center gap-2">
+                <CheckCircle2 className="h-4 w-4 text-green-600" />
+                <span className="text-sm text-green-800 font-medium">Todos os itens conferidos — expedição liberada.</span>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* ─── SEÇÃO 1: EXPEDIÇÃO ─── */}
       <div className="rounded-xl border bg-card overflow-hidden">
