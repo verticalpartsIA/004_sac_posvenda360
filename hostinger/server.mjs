@@ -489,7 +489,7 @@ function contextoQuemFala(quem, isFirst) {
     const ehVendedor = /vendedor|comercial/i.test(quem.cargo || "") || /comercial/i.test(quem.dept || "");
     let s = `QUEM ESTÁ FALANDO: ${quem.nome} — ${quem.cargo}${quem.dept ? `, ${quem.dept}` : ""} da VerticalParts. É um contato INTERNO da equipe (NÃO é cliente externo). Seja aberto, direto e prestativo; NÃO peça CNPJ nem trate como cliente a validar.\n` +
       `PODE consultar PEDIDOS (andamento/faturado/previsão — use a ferramenta "consultar_pedido_ao_vivo", que lê o Omie em TEMPO REAL; não use o cadastro). Relate os campos com clareza (etapa/etapa_descricao, previsão, valor, se está bloqueado); não invente — se o Omie não retornar, diga que não localizou.\n` +
-      `ESTOQUE: a consulta automática de estoque ainda está sendo habilitada. Se perguntarem quantidade em estoque, NÃO invente número nenhum — diga que vai verificar e retornar.\n` +
+      `ESTOQUE: se perguntarem se há um produto e quantos, use a ferramenta "consultar_estoque" (quantidade vem do Omie em TEMPO REAL). Informe físico/disponível/reservado; se houver vários produtos parecidos, peça o código. NUNCA invente quantidade.\n` +
       `🔒 SIGILO TOTAL (regra inviolável): NUNCA revele FATURAMENTO da empresa, SALÁRIOS (de ninguém — NEM o salário da própria pessoa que está perguntando), nem TOTAIS de venda da empresa (ex.: "quanto vendemos ontem/este mês"). `;
     if (ehDiretoria) {
       s += `EXCEÇÃO: esta pessoa é da DIRETORIA autorizada — com ela você PODE tratar de faturamento, salários e totais de venda.`;
@@ -563,6 +563,17 @@ const ATENDENTE_TOOLS = [
       required: ["numero_pedido"],
     },
   },
+  {
+    name: "consultar_estoque",
+    description: "APENAS para colaboradores INTERNOS: consulta o ESTOQUE de um produto (se há e quantos). Busca o produto por CÓDIGO (ex.: VPER-879) ou por parte do NOME/descrição; a QUANTIDADE vem do Omie em TEMPO REAL. Se aparecer mais de um produto parecido, peça ao colaborador para escolher pelo código. NUNCA use para cliente externo.",
+    input_schema: {
+      type: "object",
+      properties: {
+        produto: { type: "string", description: "Código do produto (ex.: VPER-879) ou parte do nome/descrição" },
+      },
+      required: ["produto"],
+    },
+  },
 ];
 
 async function execAtendenteTool(name, input = {}) {
@@ -608,6 +619,34 @@ async function execAtendenteTool(name, input = {}) {
       if (!r.ok) return { erro: `falha na consulta (${r.status})` };
       const rows = await r.json();
       return rows.length ? { encontrado: true, pedidos: rows } : { encontrado: false, motivo: "Nenhum pedido com esse número para este cliente." };
+    }
+    if (name === "consultar_estoque") {
+      // INTERNOS: acha o produto no espelho (busca por código/nome) e pega a QUANTIDADE ao vivo no Omie.
+      const termo = String(input.produto || "").trim();
+      if (!termo) return { erro: "Informe o produto (código ou nome)." };
+      const r = await erpFetch(`/Produtos_VP?select=codigo_produto,codigo,descricao,unidade&or=(codigo.ilike.*${_enc(termo)}*,descricao.ilike.*${_enc(termo)}*)&limit=8`);
+      if (!r.ok) return { erro: `falha na busca de produto (${r.status})` };
+      const prods = await r.json();
+      if (!prods.length) return { encontrado: false, motivo: "Nenhum produto com esse código/nome." };
+      if (prods.length > 1) {
+        return { encontrado: true, multiplos: true,
+          produtos: prods.map((p) => ({ codigo: p.codigo, descricao: p.descricao, unidade: p.unidade })),
+          instrucao: "Há mais de um produto. Peça ao colaborador para escolher pelo código e consulte de novo." };
+      }
+      const p = prods[0];
+      const dataBR = new Date().toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" });
+      let pos;
+      try {
+        pos = await omieCall("estoque/consulta", "PosicaoEstoque",
+          { codigo_local_estoque: 0, id_prod: p.codigo_produto, cod_int: "", data: dataBR });
+      } catch (e) { return { erro: `Omie indisponível: ${e.message}` }; }
+      if (pos?.faultstring) return { encontrado: true, produto: p.descricao, codigo: p.codigo, motivo: `Estoque indisponível no Omie: ${pos.faultstring}` };
+      return {
+        encontrado: true, fonte: "Omie ao vivo",
+        codigo: p.codigo, produto: p.descricao, unidade: p.unidade,
+        em_estoque_fisico: pos?.fisico, disponivel: pos?.saldo, reservado: pos?.reservado,
+        estoque_minimo: pos?.estoque_minimo,
+      };
     }
     if (name === "consultar_pedido_ao_vivo") {
       // INTERNOS: consulta o pedido DIRETO no Omie (tempo real). Sem trava de cliente —
@@ -2209,7 +2248,7 @@ const server = http.createServer(async (req, res) => {
       const claudeKey = ANTHROPIC_KEY();
       const notifyUrl = NOTIFY_URL();
       res.end(JSON.stringify({
-        deploy_version: "verti-1.7-sigilo",
+        deploy_version: "verti-1.8-estoque",
         claude_key_set: claudeKey.length > 0,
         claude_key_prefix: claudeKey ? claudeKey.slice(0, 12) + "..." : null,
         claude_model: CLAUDE_MODEL(),
