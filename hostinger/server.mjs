@@ -55,12 +55,12 @@ function vcFetch(path, opts = {}) {
   });
 }
 const ANTHROPIC_KEY   = () => process.env.ANTHROPIC_API_KEY || "";
-const CLAUDE_MODEL    = () => process.env.CLAUDE_MODEL || process.env.HERMES_MODEL || "claude-opus-4-8";
+const CLAUDE_MODEL    = () => process.env.CLAUDE_MODEL || "claude-opus-4-8"; // Opus por padrão (NÃO cai p/ HERMES_MODEL=haiku do painel)
 const NOTIFY_URL      = () => process.env.NOTIFY_WEBHOOK_URL || ""; // n8n / Slack / Telegram
 // STT local (faster-whisper no VPS) — transcreve áudios de clientes p/ a Verti "ouvir".
 // A API Anthropic não aceita áudio; a transcrição é 100% local (sem custo, sem terceiros).
 const STT_URL         = () => process.env.STT_URL || "http://72.61.48.156:8090/transcribe";
-const STT_APIKEY      = () => process.env.STT_APIKEY || "";
+const STT_APIKEY      = () => process.env.STT_APIKEY || "b9cf3d5fbd2b1f3559b50e5d5936da0e2e078b841d815a81"; // default p/ sobreviver a deploy (gitignored .env some no republish); repo privado, mesmo padrão dos demais segredos
 const EVO_URL         = "http://72.61.48.156:8080";
 
 const OPEN_STATUSES = ["aberto","em_atendimento","aguardando_cliente","aguardando_interno"];
