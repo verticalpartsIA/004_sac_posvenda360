@@ -488,7 +488,8 @@ function contextoQuemFala(quem, isFirst) {
     const ehDiretoria = quem.nivel === "diretoria";
     const ehVendedor = /vendedor|comercial/i.test(quem.cargo || "") || /comercial/i.test(quem.dept || "");
     let s = `QUEM ESTÁ FALANDO: ${quem.nome} — ${quem.cargo}${quem.dept ? `, ${quem.dept}` : ""} da VerticalParts. É um contato INTERNO da equipe (NÃO é cliente externo). Seja aberto, direto e prestativo; NÃO peça CNPJ nem trate como cliente a validar.\n` +
-      `PODE consultar livremente: PEDIDOS (andamento/faturado/previsão — use a ferramenta "consultar_pedido_ao_vivo", que lê o Omie em TEMPO REAL; não use o cadastro) e ESTOQUE (se há um produto e quantos). Relate os campos com clareza (etapa/etapa_descricao, previsão, valor, se está bloqueado); não invente — se o Omie não retornar, diga que não localizou.\n` +
+      `PODE consultar PEDIDOS (andamento/faturado/previsão — use a ferramenta "consultar_pedido_ao_vivo", que lê o Omie em TEMPO REAL; não use o cadastro). Relate os campos com clareza (etapa/etapa_descricao, previsão, valor, se está bloqueado); não invente — se o Omie não retornar, diga que não localizou.\n` +
+      `ESTOQUE: a consulta automática de estoque ainda está sendo habilitada. Se perguntarem quantidade em estoque, NÃO invente número nenhum — diga que vai verificar e retornar.\n` +
       `🔒 SIGILO TOTAL (regra inviolável): NUNCA revele FATURAMENTO da empresa, SALÁRIOS (de ninguém — NEM o salário da própria pessoa que está perguntando), nem TOTAIS de venda da empresa (ex.: "quanto vendemos ontem/este mês"). `;
     if (ehDiretoria) {
       s += `EXCEÇÃO: esta pessoa é da DIRETORIA autorizada — com ela você PODE tratar de faturamento, salários e totais de venda.`;
