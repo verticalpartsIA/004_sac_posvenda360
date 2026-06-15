@@ -749,6 +749,24 @@ async function execAtendenteTool(name, input = {}) {
   }
 }
 
+// MEMÓRIA DE LONGO PRAZO do contato: a Verti "nunca esquece" quem já falou com ela.
+// Usa os tickets anteriores deste mesmo WhatsApp (nome, motivo, status, data) — é o histórico
+// do próprio contato (mesmo número), então pode ser referenciado sem ferir validação/sigilo.
+async function historicoContato(remoteJid) {
+  try {
+    const r = await sbFetch(`/rest/v1/tickets?select=code,reason,status,created_at,customer&whatsapp_thread_id=eq.${encodeURIComponent(remoteJid)}&order=created_at.desc&limit=6`);
+    if (!r.ok) return "";
+    const rows = await r.json();
+    if (!Array.isArray(rows) || rows.length <= 1) return ""; // só o contato atual (ou nenhum) → sem histórico
+    const nome = (rows.find((t) => t.customer) || {}).customer || null;
+    const passados = rows.slice(1).map((t) =>
+      `• ${(t.created_at || "").slice(0, 10)} — "${(t.reason || "").slice(0, 90)}" (status: ${t.status || "?"}, ticket ${t.code || "?"})`
+    ).join("\n");
+    return `\n\nMEMÓRIA DESTE CONTATO — você JÁ o atendeu antes${nome ? ` (é ${nome})` : ""}. Atendimentos anteriores:\n${passados}\n` +
+      `Você NUNCA esquece quem já te procurou: cumprimente pelo NOME, demonstre que se lembra e — quando fizer sentido — pergunte se o assunto do último contato foi RESOLVIDO e retome o porquê de ele ter procurado naquele dia. Não trate como estranho.`;
+  } catch { return ""; }
+}
+
 async function callClaudeWithHistory(remoteJid) {
   const apiKey = ANTHROPIC_KEY();
   if (!apiKey) return null;
@@ -773,7 +791,8 @@ async function callClaudeWithHistory(remoteJid) {
   // Quem está falando (interno/cliente reconhecido/desconhecido) + se é a 1ª mensagem
   const quem = await resolveQuemFala(remoteJid);
   const isFirst = !history.some((m) => m.role === "assistant");
-  const sysPrompt = buildSystemPrompt() + "\n\n" + contextoQuemFala(quem, isFirst);
+  const memoria = await historicoContato(remoteJid);
+  const sysPrompt = buildSystemPrompt() + "\n\n" + contextoQuemFala(quem, isFirst) + memoria;
 
   const messages = history;
   try {
@@ -2310,7 +2329,7 @@ const server = http.createServer(async (req, res) => {
       const claudeKey = ANTHROPIC_KEY();
       const notifyUrl = NOTIFY_URL();
       res.end(JSON.stringify({
-        deploy_version: "verti-2.0-skill",
+        deploy_version: "verti-2.1-memoria",
         claude_key_set: claudeKey.length > 0,
         claude_key_prefix: claudeKey ? claudeKey.slice(0, 12) + "..." : null,
         claude_model: CLAUDE_MODEL(),
