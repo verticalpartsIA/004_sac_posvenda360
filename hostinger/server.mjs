@@ -352,6 +352,13 @@ TOM — NÃO IRRITAR O CLIENTE (de-escalonamento):
 - Evite respostas robóticas/repetitivas; não repita a mesma frase pronta toda hora.
 - Se o cliente estiver muito irritado ou for um caso delicado, peça desculpas, assuma o caso e diga que vai acionar nossos atendentes imediatamente.
 
+TÉCNICA DE ATENDIMENTO (boas práticas):
+- ESCUTA ATIVA + CONFIRMAÇÃO: parafraseie e confirme o pedido antes de agir ("Entendi que você precisa de... correto?").
+- EMPATIA E RESILIÊNCIA: valide a frustração do cliente sem levar para o lado pessoal; tom acolhedor e RESOLUTIVO.
+- LINGUAGEM POSITIVA E DIRETA: evite jargão técnico; em vez de "não podemos fazer isso", diga "o que posso fazer por você agora é...".
+- RESOLUÇÃO ESTRUTURADA: investigue o histórico de compras e identifique o erro/causa exato ANTES de propor caminhos.
+- PROATIVIDADE: antecipe dúvidas — informe o próximo passo/prazo antes de o cliente perguntar.
+
 HORÁRIO E FERIADOS:
 - Use o "CONTEXTO DE HOJE" abaixo para saber a data/hora real e se estamos abertos.
 - FORA do horário ou em feriado: você continua ajudando no que for possível (dúvidas, registrar a ocorrência), mas avise com clareza que nossos atendentes retornarão no próximo dia/horário útil. Nunca prometa retorno imediato fora do horário. NUNCA use a expressão "equipe humana" (soa robótico) — diga "nossos atendentes" ou "nossa equipe".
@@ -405,8 +412,25 @@ IMPORTANTE:
 - Se perguntarem se você é humano ou robô, seja honesto mas gentil.
 - Priorize sempre a resolução do problema do cliente.`;
 
+// Contatos diretos por departamento (p/ redirecionar clientes que pedem o contato de um setor).
+// VAZIO = não configurado. ⚠️ A Verti NUNCA inventa número: se faltar, encaminha à equipe.
+// Preencher com os números OFICIAIS que o Gelson passar (não usar celular pessoal do roster sem ordem).
+const CONTATOS_DEPARTAMENTO = {
+  // "Financeiro": "(11) 9....",
+  // "Vendas": "(11) 9....",
+  // "Expedição": "(11) 9....",
+  // "Marketing": "(11) 9....",
+  // "Engenharia": "(11) 9....",
+};
+function blocoContatosDepto() {
+  const ents = Object.entries(CONTATOS_DEPARTAMENTO);
+  let s = `\n\nCONTATOS POR DEPARTAMENTO (quando o cliente pedir o contato direto de um setor):`;
+  s += ents.length ? ents.map(([d, n]) => `\n- ${d}: ${n}`).join("") : `\n- (Nenhum número configurado ainda.)`;
+  s += `\nREGRA INVIOLÁVEL: forneça APENAS um número que esteja listado acima. Se o setor pedido NÃO estiver na lista, é PROIBIDO inventar — diga que vai encaminhar a solicitação ao setor e que a equipe retorna o contato. NUNCA deixe o cliente sem resposta.`;
+  return s;
+}
 function buildSystemPrompt() {
-  return CLAUDE_BASE_PROMPT + "\n\n" + atendimentoContexto();
+  return CLAUDE_BASE_PROMPT + "\n\n" + atendimentoContexto() + blocoContatosDepto();
 }
 
 // ─── Acesso ao ERP (bd_Omie) para consultas do atendente ──────────────────────
@@ -2286,7 +2310,7 @@ const server = http.createServer(async (req, res) => {
       const claudeKey = ANTHROPIC_KEY();
       const notifyUrl = NOTIFY_URL();
       res.end(JSON.stringify({
-        deploy_version: "verti-1.9-fluxos",
+        deploy_version: "verti-2.0-skill",
         claude_key_set: claudeKey.length > 0,
         claude_key_prefix: claudeKey ? claudeKey.slice(0, 12) + "..." : null,
         claude_model: CLAUDE_MODEL(),
