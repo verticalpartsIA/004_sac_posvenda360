@@ -317,13 +317,13 @@ function atendimentoContexto() {
   const hol = holidaysFor(n.year)[n.monthDay];
   const hours = BUSINESS_HOURS[n.dow];
   let status;
-  if (hol) status = `Hoje é FERIADO (${hol}) — equipe humana NÃO está atendendo.`;
-  else if (!hours) status = "Hoje é fim de semana — equipe humana NÃO está atendendo.";
+  if (hol) status = `Hoje é FERIADO (${hol}) — nossos atendentes não estão disponíveis hoje.`;
+  else if (!hours) status = "Hoje é fim de semana — nossos atendentes não estão disponíveis.";
   else {
     const aberto = n.hour >= hours[0] && n.hour < hours[1];
     status = aberto
       ? "AGORA estamos DENTRO do horário de atendimento."
-      : "AGORA estamos FORA do horário de atendimento (a equipe humana retorna no próximo horário comercial).";
+      : "AGORA estamos FORA do horário de atendimento (nossos atendentes retornam no próximo horário comercial).";
   }
   const lista = Object.entries(holidaysFor(n.year))
     .sort((a, b) => a[0].localeCompare(b[0]))
@@ -349,11 +349,11 @@ TOM — NÃO IRRITAR O CLIENTE (de-escalonamento):
 - Sempre acolha o sentimento antes de resolver ("Entendo sua preocupação", "Sinto muito pelo transtorno").
 - Nunca culpe o cliente, nunca discuta nem seja defensivo. Seja paciente mesmo se ele for ríspido.
 - Evite respostas robóticas/repetitivas; não repita a mesma frase pronta toda hora.
-- Se o cliente estiver muito irritado ou for um caso delicado, peça desculpas, assuma o caso e diga que vai acionar a equipe imediatamente.
+- Se o cliente estiver muito irritado ou for um caso delicado, peça desculpas, assuma o caso e diga que vai acionar nossos atendentes imediatamente.
 
 HORÁRIO E FERIADOS:
 - Use o "CONTEXTO DE HOJE" abaixo para saber a data/hora real e se estamos abertos.
-- FORA do horário ou em feriado: você continua ajudando no que for possível (dúvidas, registrar a ocorrência), mas avise com clareza que a equipe humana retornará no próximo dia/horário útil. Nunca prometa retorno humano imediato fora do horário.
+- FORA do horário ou em feriado: você continua ajudando no que for possível (dúvidas, registrar a ocorrência), mas avise com clareza que nossos atendentes retornarão no próximo dia/horário útil. Nunca prometa retorno imediato fora do horário. NUNCA use a expressão "equipe humana" (soa robótico) — diga "nossos atendentes" ou "nossa equipe".
 - Se perguntarem sobre horário ou um dia específico, responda com base no horário e na lista de feriados.
 
 SEGURANÇA / ANTI-GOLPE (muito importante):
@@ -2129,7 +2129,7 @@ const server = http.createServer(async (req, res) => {
       const claudeKey = ANTHROPIC_KEY();
       const notifyUrl = NOTIFY_URL();
       res.end(JSON.stringify({
-        deploy_version: "verti-1.4-audio",
+        deploy_version: "verti-1.5-audio",
         claude_key_set: claudeKey.length > 0,
         claude_key_prefix: claudeKey ? claudeKey.slice(0, 12) + "..." : null,
         claude_model: CLAUDE_MODEL(),
