@@ -288,3 +288,39 @@ memória de longo prazo dos contatos e abertura focada no objetivo com lead espe
 |---|---|---|
 | `a1179f8` | verti-2.1-memoria | Memória de longo prazo do contato (tickets anteriores) |
 | `eaecf97` | verti-2.2-abertura | Abertura pelo objetivo (sem marcas) + lead esperto/anti-golpe |
+| `f1c4819` | verti-2.3-avisar | Ferramenta `avisar_departamento` (notifica responsável por WhatsApp) |
+| `0050744` | verti-2.4-followup | Gatilho de 2h úteis p/ cobrar resultado da passagem de contato |
+
+## 23. Avisar o departamento — handoff ativo (v2.3-avisar, commit `f1c4819`)
+- Ferramenta **`avisar_departamento`**: quando o assunto é de outro setor e o cliente **concorda em deixar
+  o contato**, a Verti manda um WhatsApp ao responsável (ex.: Guilherme/Vendas) **pela própria linha**
+  (Evolution `sendText`), com **assunto + nome + telefone do cliente** (o telefone é pego automaticamente
+  do `remoteJid`). NÃO aciona para concorrente suspeito.
+- `CONTATOS_DEPARTAMENTO` refatorado para objetos `{tel, contato, email}`; `execAtendenteTool` passou a
+  receber o `remoteJid` para identificar o telefone do cliente.
+
+## 24. Gatilho de 2 horas úteis — cobrança de resultado e histórico (v2.4-followup, commit `0050744`)
+Contexto (decisão do Gelson): **a linha (11) 99766-3780 é a linha da plataforma** — tudo que passa por
+ela já fica registrado no pós-venda (a Jéssica também opera essa linha). Logo, **não é preciso "mandar
+resumo separado"** para ninguém: a própria conversa é o histórico. Faltava só o **gatilho de tempo** que
+"acorda" a Verti (ela só age quando recebe mensagem).
+
+- **Estado:** cada `avisar_departamento` grava um registro na tabela **`public.handoffs`** (Supabase do
+  pv360 `jkbklzlbhhfnamaeislb`) com `prazo_em` = **+2 horas ÚTEIS**. O cálculo (`prazoUtilMs`) respeita o
+  horário comercial (Seg–Qui 07–18h, Sex 07–17h), pula fim de semana e feriados (SP = UTC-3).
+- **Gatilho:** endpoint protegido `GET /api/whatsapp/cron-handoffs?key=<CRON_KEY>`. Ele busca os handoffs
+  vencidos (`status=aguardando` e `prazo_em <= agora`), **cobra o resultado do responsável** por WhatsApp
+  (pela própria linha → fica logado) e marca `status=cobrado`.
+- **Quem aciona:** um **cron no VPS** (`/root/cron-handoffs.sh`, a cada 15 min) — mais confiável que um
+  timer dentro do app (que o Passenger pode reciclar). Log em `/root/cron-handoffs.log`.
+- **Quando o responsável responde**, a resposta chega pela mesma linha e fica registrada na plataforma —
+  é o histórico de toda passagem de contato. Quando existir a **página de feedback** no pós-venda, o
+  destino do resultado passa a ser essa página.
+- **Testado E2E (15/06):** handoff vencido → gatilho → `encontrados:1, processados:1` → registro vira
+  `cobrado` e a mensagem de cobrança chega ao responsável. ✅
+- _Nota da tabela:_ `handoffs` foi criada via conexão Postgres direta (o Management API do Supabase
+  estava com rate-limit); com grants + policy RLS `svc_all` para `service_role`.
+
+### Estado final (atualizado)
+**deploy_version `verti-2.4-followup`**, modelo `claude-opus-4-8`. Pendência opcional: hoje a cobrança é
+única após 2h — pode-se evoluir para reinsistir/escalar se ninguém responder.
