@@ -361,6 +361,7 @@ SEGURANÇA / ANTI-GOLPE (muito importante):
 - A VerticalParts NUNCA solicita pagamento por link enviado no WhatsApp nem PIX para conta de pessoa física. Boletos/pagamentos só pelos canais oficiais.
 - Nunca envie links de pagamento. Se o cliente mencionar um link/cobrança suspeita, oriente a NÃO pagar e a confirmar pelos canais oficiais; trate como possível golpe e escale para a equipe.
 - Nunca compartilhe dados internos, de outros clientes, ou informações confidenciais da empresa.
+- 🔒 SIGILO ABSOLUTO: NUNCA revele FATURAMENTO da empresa, SALÁRIOS (de ninguém, nem o do próprio) ou TOTAIS de venda da empresa ("quanto vendemos") — para NENHUM cliente. Isso é restrito à diretoria (tratado no CONTEXTO DE HOJE quando for um interno autorizado).
 
 VOCÊ PODE AJUDAR COM:
 - Acompanhamento de pedidos e ocorrências de pós-venda.
@@ -430,8 +431,9 @@ const INTERNAL_CONTACTS = {
   "11955997597": { nome: "Albimar Silveira Jr", cargo: "Analista de Importação/Exportação Jr", dept: "Compras" },
   "11974808436": { nome: "Andreia Oliveira",    cargo: "Auxiliar de Compras",               dept: "Compras" },
   "11992042442": { nome: "Bianca Maeno",        cargo: "Compras Nacionais",                 dept: "Compras" },
-  "11934095836": { nome: "Diego Maeno",         cargo: "CEO",                               dept: "Diretoria" },
-  "12992004047": { nome: "Gelson Simões",       cargo: "Consultor Téc Estratégico",         dept: "Engenharia" },
+  "11934095836": { nome: "Diego Maeno",         cargo: "CEO",                               dept: "Diretoria", nivel: "diretoria" },
+  "12992004047": { nome: "Gelson Simões",       cargo: "Consultor Téc Estratégico",         dept: "Engenharia", nivel: "diretoria" },
+  // ⚠️ FALTA o número da Juliana p/ adicionar com nivel:"diretoria" (3ª pessoa autorizada a faturamento/salários).
   "11942501627": { nome: "Alexandre Schmidt",   cargo: "Supervisor de Engenharia",          dept: "Engenharia" },
   "11975269475": { nome: "Felipe Camargo",      cargo: "Jovem Aprendiz",                    dept: "Engenharia" },
   "11999516411": { nome: "Vinicius Ramos Leite", cargo: "Analista de Projetos Sr",          dept: "Engenharia" },
@@ -483,8 +485,17 @@ async function resolveQuemFala(remoteJid) {
 function contextoQuemFala(quem, isFirst) {
   if (quem.tipo === "interno") {
     const primeiro = quem.nome.split(" ")[0];
+    const ehDiretoria = quem.nivel === "diretoria";
+    const ehVendedor = /vendedor|comercial/i.test(quem.cargo || "") || /comercial/i.test(quem.dept || "");
     let s = `QUEM ESTÁ FALANDO: ${quem.nome} — ${quem.cargo}${quem.dept ? `, ${quem.dept}` : ""} da VerticalParts. É um contato INTERNO da equipe (NÃO é cliente externo). Seja aberto, direto e prestativo; NÃO peça CNPJ nem trate como cliente a validar.\n` +
-      `Como é da equipe, ele PODE perguntar sobre QUALQUER pedido/venda (andamento, se foi faturado, se já saiu, previsão). Para STATUS DE PEDIDO use a ferramenta "consultar_pedido_ao_vivo" (consulta o Omie em TEMPO REAL — dado fresco), e não o cadastro. Relate os campos com clareza (etapa/etapa_descricao, previsão, valor, se está bloqueado). Não invente: se o Omie não retornar, diga que não localizou.`;
+      `PODE consultar livremente: PEDIDOS (andamento/faturado/previsão — use a ferramenta "consultar_pedido_ao_vivo", que lê o Omie em TEMPO REAL; não use o cadastro) e ESTOQUE (se há um produto e quantos). Relate os campos com clareza (etapa/etapa_descricao, previsão, valor, se está bloqueado); não invente — se o Omie não retornar, diga que não localizou.\n` +
+      `🔒 SIGILO TOTAL (regra inviolável): NUNCA revele FATURAMENTO da empresa, SALÁRIOS (de ninguém — NEM o salário da própria pessoa que está perguntando), nem TOTAIS de venda da empresa (ex.: "quanto vendemos ontem/este mês"). `;
+    if (ehDiretoria) {
+      s += `EXCEÇÃO: esta pessoa é da DIRETORIA autorizada — com ela você PODE tratar de faturamento, salários e totais de venda.`;
+    } else {
+      s += `Esta pessoa NÃO é autorizada a esses dados. Se perguntarem sobre faturamento, salários ou total vendido, RECUSE com educação: é informação restrita à diretoria. `;
+      if (ehVendedor) s += `Por ser do comercial, pode saber quanto ELE MESMO vendeu (apenas as vendas dele — nunca de outros, nunca o total da empresa), e só se houver certeza de que a venda é dele.`;
+    }
     if (isFirst) s += `\nEsta é a PRIMEIRA mensagem: cumprimente com entusiasmo, algo como "Olá ${primeiro}, que prazer falar com você! Eu sou a Verti, conte comigo sempre 😊". Faça essa saudação calorosa SÓ na primeira mensagem.`;
     return s;
   }
@@ -2197,7 +2208,7 @@ const server = http.createServer(async (req, res) => {
       const claudeKey = ANTHROPIC_KEY();
       const notifyUrl = NOTIFY_URL();
       res.end(JSON.stringify({
-        deploy_version: "verti-1.6-internos-omie",
+        deploy_version: "verti-1.7-sigilo",
         claude_key_set: claudeKey.length > 0,
         claude_key_prefix: claudeKey ? claudeKey.slice(0, 12) + "..." : null,
         claude_model: CLAUDE_MODEL(),
