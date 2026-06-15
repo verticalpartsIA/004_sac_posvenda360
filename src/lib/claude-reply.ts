@@ -1,7 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 
 // ─── config ───────────────────────────────────────────────────────────────────
-const CLAUDE_MODEL  = () => process.env.HERMES_MODEL ?? "claude-haiku-4-5";
+const CLAUDE_MODEL  = () => process.env.CLAUDE_MODEL ?? process.env.HERMES_MODEL ?? "claude-opus-4-8";
 const EVO_URL       = "http://72.61.48.156:8080";
 const EVO_INSTANCE  = "pv360";
 const HISTORY_LIMIT = 20;
@@ -66,13 +66,13 @@ function normalizeHistory(msgs: ChatMsg[]): ChatMsg[] {
 async function callClaude(history: ChatMsg[]): Promise<string | null> {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
-    console.error("[hermes] ANTHROPIC_API_KEY não configurada");
+    console.error("[claude] ANTHROPIC_API_KEY não configurada");
     return null;
   }
 
   const messages = normalizeHistory(history);
   if (messages.length === 0) {
-    console.warn("[hermes] histórico vazio após normalização");
+    console.warn("[claude] histórico vazio após normalização");
     return null;
   }
 
@@ -94,14 +94,14 @@ async function callClaude(history: ChatMsg[]): Promise<string | null> {
     });
 
     if (!res.ok) {
-      console.error(`[hermes] Anthropic HTTP ${res.status}:`, await res.text().catch(() => ""));
+      console.error(`[claude] Anthropic HTTP ${res.status}:`, await res.text().catch(() => ""));
       return null;
     }
 
     const data = (await res.json()) as AnthropicResp;
     return data?.content?.[0]?.text?.trim() || null;
   } catch (err) {
-    console.error("[hermes] call error:", err instanceof Error ? err.message : String(err));
+    console.error("[claude] call error:", err instanceof Error ? err.message : String(err));
     return null;
   }
 }
@@ -113,14 +113,14 @@ const MEDIA_ONLY = new Set([
 ]);
 
 // ─── função principal exportada ───────────────────────────────────────────────
-export async function autoReplyWithHermes(params: {
+export async function autoReplyWithClaude(params: {
   remoteJid: string;
   body: string;
   ticketId: string | null;
   pushName: string | null;
 }) {
   // Desligado se env não estiver explicitamente habilitado
-  if (process.env.HERMES_AUTO_REPLY !== "true") return;
+  if ((process.env.CLAUDE_AUTO_REPLY ?? process.env.HERMES_AUTO_REPLY) !== "true") return;
 
   const { remoteJid, body, ticketId, pushName } = params;
 
@@ -134,7 +134,7 @@ export async function autoReplyWithHermes(params: {
   // Evolution API não consegue enviar para @lid — ticket é criado para atendimento humano
   const isLid = remoteJid.endsWith("@lid");
   if (isLid) {
-    console.log(`[hermes] ⚠️ contato @lid (${remoteJid}) — auto-reply não suportado pela Evolution API. Ticket criado para equipe.`);
+    console.log(`[claude] ⚠️ contato @lid (${remoteJid}) — auto-reply não suportado pela Evolution API. Ticket criado para equipe.`);
     return;
   }
   const phone = remoteJid
@@ -158,7 +158,7 @@ export async function autoReplyWithHermes(params: {
     .limit(HISTORY_LIMIT);
 
   if (histErr) {
-    console.error("[hermes] history error:", histErr.message);
+    console.error("[claude] history error:", histErr.message);
     return;
   }
 
@@ -169,11 +169,11 @@ export async function autoReplyWithHermes(params: {
   }));
 
   const label = pushName ?? (isLid ? `lid:${phone.slice(0, 8)}` : phone);
-  console.log(`[hermes] chamando Claude para ${label} (${messages.length} msgs de histórico)`);
+  console.log(`[claude] chamando Claude para ${label} (${messages.length} msgs de histórico)`);
 
   const reply = await callClaude(messages);
   if (!reply) {
-    console.warn("[hermes] sem resposta gerada para", remoteJid);
+    console.warn("[claude] sem resposta gerada para", remoteJid);
     return;
   }
 
@@ -195,7 +195,7 @@ export async function autoReplyWithHermes(params: {
 
     if (!r.ok) {
       const detail = await r.json().catch(() => ({}));
-      console.error("[hermes] Evolution send error:", detail);
+      console.error("[claude] Evolution send error:", detail);
       return;
     }
 
@@ -212,8 +212,8 @@ export async function autoReplyWithHermes(params: {
       ticket_id: ticketId,
     });
 
-    console.log(`[hermes] ✅ respondido para ${pushName ?? phone}: "${reply.slice(0, 60)}..."`);
+    console.log(`[claude] ✅ respondido para ${pushName ?? phone}: "${reply.slice(0, 60)}..."`);
   } catch (err) {
-    console.error("[hermes] send error:", err instanceof Error ? err.message : String(err));
+    console.error("[claude] send error:", err instanceof Error ? err.message : String(err));
   }
 }

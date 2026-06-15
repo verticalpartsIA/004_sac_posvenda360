@@ -1,8 +1,26 @@
 import http from "node:http";
-import { createReadStream, existsSync, statSync } from "node:fs";
+import { createReadStream, existsSync, statSync, readFileSync } from "node:fs";
 import { join, extname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Readable } from "node:stream";
+
+// ─── Carrega um .env local (nodejs/.env), SEM sobrescrever o que o painel já injeta ──
+// O Passenger/hPanel injeta os segredos (ANTHROPIC_API_KEY etc.) no process.env. Este
+// loader só PREENCHE chaves ausentes (ex.: CLAUDE_MODEL, STT_APIKEY) a partir de um
+// arquivo gerenciável por SSH e que sobrevive aos deploys (.env é gitignored).
+(() => {
+  try {
+    const envPath = fileURLToPath(new URL("../.env", import.meta.url)); // nodejs/.env
+    if (!existsSync(envPath)) return;
+    for (const line of readFileSync(envPath, "utf8").split("\n")) {
+      const m = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*?)\s*$/);
+      if (!m || (m[1] in process.env)) continue;
+      let v = m[2];
+      if ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'"))) v = v.slice(1, -1);
+      process.env[m[1]] = v;
+    }
+  } catch (e) { console.error("[env] falha ao carregar .env local:", e.message); }
+})();
 
 // ─── WhatsApp Webhook (Evolution API → Supabase) ──────────────────────────────
 // Handler nativo Node.js — independente do TanStack Router.
@@ -37,8 +55,13 @@ function vcFetch(path, opts = {}) {
   });
 }
 const ANTHROPIC_KEY   = () => process.env.ANTHROPIC_API_KEY || "";
-const CLAUDE_MODEL    = () => process.env.HERMES_MODEL || "claude-haiku-4-5";
+const CLAUDE_MODEL    = () => process.env.CLAUDE_MODEL || process.env.HERMES_MODEL || "claude-opus-4-8";
 const NOTIFY_URL      = () => process.env.NOTIFY_WEBHOOK_URL || ""; // n8n / Slack / Telegram
+// STT local (faster-whisper no VPS) — transcreve áudios de clientes p/ a Verti "ouvir".
+// A API Anthropic não aceita áudio; a transcrição é 100% local (sem custo, sem terceiros).
+const STT_URL         = () => process.env.STT_URL || "http://72.61.48.156:8090/transcribe";
+const STT_APIKEY      = () => process.env.STT_APIKEY || "";
+const EVO_URL         = "http://72.61.48.156:8080";
 
 const OPEN_STATUSES = ["aberto","em_atendimento","aguardando_cliente","aguardando_interno"];
 
@@ -95,6 +118,51 @@ function extractMediaType(msg) {
   if (msg.locationMessage) return "location";
   if (msg.contactMessage) return "contact";
   return null;
+}
+
+// ─── Transcrição de áudio (STT local no VPS) ──────────────────────────────────
+// WhatsApp envia voz como PTT em OGG/Opus. Com webhookBase64=true a Evolution embute
+// o base64 no payload; se faltar, baixamos via getBase64FromMediaMessage. O texto volta
+// do serviço STT (faster-whisper) que roda no VPS — a Verti então responde em TEXTO.
+async function transcreverAudio(data) {
+  const apikey = STT_APIKEY();
+  if (!apikey) { console.warn("[stt] STT_APIKEY não configurada — áudio ignorado"); return null; }
+
+  // 1) base64 que já vem no webhook
+  let b64 = data?.message?.base64 || data?.message?.audioMessage?.base64 || data?.base64 || null;
+
+  // 2) fallback: pede o base64 à Evolution
+  if (!b64) {
+    try {
+      const r = await fetch(`${EVO_URL}/chat/getBase64FromMediaMessage/pv360`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", apikey: WH_APIKEY() },
+        body: JSON.stringify({ message: { key: data?.key }, convertToMp4: false }),
+        signal: AbortSignal.timeout(30_000),
+      });
+      if (r.ok) { const j = await r.json(); b64 = j?.base64 || j?.media || null; }
+      else console.error("[stt] getBase64 HTTP", r.status);
+    } catch (e) { console.error("[stt] getBase64 error:", e.message); }
+  }
+
+  if (!b64) {
+    console.warn("[stt] sem base64 de áudio. chaves de data.message:", Object.keys(data?.message || {}));
+    return null;
+  }
+
+  try {
+    const r = await fetch(STT_URL(), {
+      method: "POST",
+      headers: { "Content-Type": "application/json", apikey },
+      body: JSON.stringify({ audio_base64: b64, ext: "ogg" }),
+      signal: AbortSignal.timeout(120_000),
+    });
+    if (!r.ok) { console.error("[stt] HTTP", r.status, await r.text().catch(() => "")); return null; }
+    const j = await r.json();
+    const text = (j?.text || "").trim();
+    console.log(`[stt] transcrito (${j?.ms}ms): "${text.slice(0, 80)}"`);
+    return text || null;
+  } catch (e) { console.error("[stt] call error:", e.message); return null; }
 }
 
 function readBody(req) {
@@ -176,7 +244,8 @@ async function handleWhatsappWebhook(req, res) {
   const isExternalCustomer = !fromMe && bodyText &&
     (remoteJid.endsWith("@s.whatsapp.net") || remoteJid.endsWith("@lid"));
   if (isExternalCustomer) {
-    automateIncoming({ remoteJid, pushName, displayBody, insertedId }).catch((e) =>
+    automateIncoming({ remoteJid, pushName, displayBody, insertedId,
+      isAudio: mediaType === "audio", data }).catch((e) =>
       console.error("[automate] erro geral:", e.message),
     );
   }
@@ -577,10 +646,26 @@ async function callClaudeWithHistory(remoteJid) {
 }
 
 // ─── Pipeline de automação ────────────────────────────────────────────────────
-async function automateIncoming({ remoteJid, pushName, displayBody, insertedId }) {
+async function automateIncoming({ remoteJid, pushName, displayBody, insertedId, isAudio = false, data = null }) {
   const isLid = remoteJid.endsWith("@lid");
   const phone = remoteJid.replace("@s.whatsapp.net", "").replace("@lid", "").replace("@c.us", "");
   const contactName = pushName || (isLid ? `cliente-${phone.slice(0, 8)}` : phone);
+
+  // ── Áudio: transcreve agora (já respondemos 200 ao webhook) e corrige o corpo ──
+  // Assim o histórico do Claude e o ticket passam a ter o TEXTO do que o cliente falou.
+  let audioTranscript = null;
+  if (isAudio && data) {
+    audioTranscript = await transcreverAudio(data);
+    if (audioTranscript) {
+      displayBody = `🎙️ (áudio) ${audioTranscript}`;
+      if (insertedId) {
+        await sbFetch(`/rest/v1/whatsapp_messages?id=eq.${insertedId}`, {
+          method: "PATCH",
+          body: JSON.stringify({ body: displayBody }),
+        }).catch((e) => console.error("[automate] patch transcrição:", e.message));
+      }
+    }
+  }
 
   // ── A. Busca ticket aberto existente ──────────────────────────────────────
   const statusFilter = OPEN_STATUSES.map(s => `"${s}"`).join(",");
@@ -643,10 +728,12 @@ async function automateIncoming({ remoteJid, pushName, displayBody, insertedId }
   }
 
   // ── D. Resposta automática via Claude (toda mensagem, se habilitado) ──────
-  const autoReply = (process.env.HERMES_AUTO_REPLY || "").toLowerCase() === "true";
+  const autoReply = (process.env.CLAUDE_AUTO_REPLY || process.env.HERMES_AUTO_REPLY || "").toLowerCase() === "true";
   if (autoReply) {
-    const replyText = await callClaudeWithHistory(remoteJid);
+    let replyText = await callClaudeWithHistory(remoteJid);
     if (replyText) {
+      // Áudio: a Verti reconhece que ouviu o áudio e então responde (tudo em texto).
+      if (audioTranscript) replyText = `🎙️ Entendi seu áudio: "${audioTranscript}"\n\n${replyText}`;
       try {
         const sendNumber = isLid ? remoteJid : phone;
         const r = await fetch(`http://72.61.48.156:8080/message/sendText/pv360`, {
@@ -2042,12 +2129,13 @@ const server = http.createServer(async (req, res) => {
       const claudeKey = ANTHROPIC_KEY();
       const notifyUrl = NOTIFY_URL();
       res.end(JSON.stringify({
-        deploy_version: "verti-1.3",
+        deploy_version: "verti-1.4-audio",
         claude_key_set: claudeKey.length > 0,
         claude_key_prefix: claudeKey ? claudeKey.slice(0, 12) + "..." : null,
         claude_model: CLAUDE_MODEL(),
-        hermes_auto_reply: process.env.HERMES_AUTO_REPLY ?? "(não definido)",
-        auto_reply_ativo: (process.env.HERMES_AUTO_REPLY || "").toLowerCase() === "true",
+        auto_reply_ativo: (process.env.CLAUDE_AUTO_REPLY || process.env.HERMES_AUTO_REPLY || "").toLowerCase() === "true",
+        stt_url_set: STT_URL().length > 0,
+        stt_apikey_set: STT_APIKEY().length > 0,
         notify_url_set: notifyUrl.length > 0,
         evolution_apikey: WH_APIKEY().slice(0, 4) + "...",
         env_file_loaded: !!process.env.SUPABASE_SERVICE_ROLE_KEY,
