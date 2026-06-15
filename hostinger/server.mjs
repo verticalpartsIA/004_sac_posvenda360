@@ -420,17 +420,35 @@ IMPORTANTE:
 // VAZIO = não configurado. ⚠️ A Verti NUNCA inventa número: se faltar, encaminha à equipe.
 // Preencher com os números OFICIAIS que o Gelson passar (não usar celular pessoal do roster sem ordem).
 const CONTATOS_DEPARTAMENTO = {
-  "Financeiro": "(11) 94460-6396 · e-mail: financeiro@verticalparts.com.br",
-  "Vendas": "(11) 94246-4292 (falar com Guilherme)",
-  "Marketing": "(11) 91894-9307",
-  "Engenharia": "(11) 96407-7688",
-  "Expedição": "(11) 91706-9961 (falar com Danilo, chefe da Expedição)",
+  "Financeiro": { tel: "11944606396", email: "financeiro@verticalparts.com.br" },
+  "Vendas":     { tel: "11942464292", contato: "Guilherme" },
+  "Marketing":  { tel: "11918949307" },
+  "Engenharia": { tel: "11964077688" },
+  "Expedição":  { tel: "11917069961", contato: "Danilo (chefe da Expedição)" },
 };
+function _fmtTel(d) {
+  d = String(d || "").replace(/\D/g, "");
+  if (d.length === 11) return `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}`;
+  if (d.length === 10) return `(${d.slice(0, 2)}) ${d.slice(2, 6)}-${d.slice(6)}`;
+  return d;
+}
+// acha um departamento pelo nome (case-insensitive, tolera acento/variação)
+function _acharDepto(nome) {
+  const n = String(nome || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+  for (const [k, v] of Object.entries(CONTATOS_DEPARTAMENTO)) {
+    const kn = k.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+    if (kn === n || kn.includes(n) || n.includes(kn)) return { depto: k, ...v };
+  }
+  return null;
+}
 function blocoContatosDepto() {
   const ents = Object.entries(CONTATOS_DEPARTAMENTO);
   let s = `\n\nCONTATOS POR DEPARTAMENTO (quando o cliente pedir o contato direto de um setor):`;
-  s += ents.length ? ents.map(([d, n]) => `\n- ${d}: ${n}`).join("") : `\n- (Nenhum número configurado ainda.)`;
+  s += ents.length
+    ? ents.map(([d, v]) => `\n- ${d}: ${_fmtTel(v.tel)}${v.contato ? ` (falar com ${v.contato})` : ""}${v.email ? ` · e-mail: ${v.email}` : ""}`).join("")
+    : `\n- (Nenhum número configurado ainda.)`;
   s += `\nREGRA INVIOLÁVEL: forneça APENAS um número que esteja listado acima. Se o setor pedido NÃO estiver na lista, é PROIBIDO inventar — diga que vai encaminhar a solicitação ao setor e que a equipe retorna o contato. NUNCA deixe o cliente sem resposta.`;
+  s += `\nAVISAR O SETOR: quando o assunto for de outro setor (ex.: nova venda/peça fora do pós-venda), OFEREÇA avisar o responsável. Com a concordância do cliente e o nome dele, use a ferramenta "avisar_departamento" para mandar um WhatsApp ao responsável com o assunto + nome + telefone do cliente. NÃO faça isso para concorrente suspeito.`;
   return s;
 }
 function buildSystemPrompt() {
@@ -631,10 +649,43 @@ const ATENDENTE_TOOLS = [
       required: ["codigo_cliente_omie"],
     },
   },
+  {
+    name: "avisar_departamento",
+    description: "Envia um aviso por WhatsApp ao responsável de um DEPARTAMENTO (Financeiro/Vendas/Expedição/Marketing/Engenharia) sobre a solicitação de um cliente, para agilizar o retorno. Use APÓS o cliente concordar em deixar o contato. NUNCA use para concorrente suspeito. O telefone do cliente é pego automaticamente da conversa.",
+    input_schema: {
+      type: "object",
+      properties: {
+        departamento: { type: "string", description: "Departamento a avisar (ex.: Vendas, Financeiro, Expedição, Marketing, Engenharia)." },
+        assunto: { type: "string", description: "Resumo curto do que o cliente precisa." },
+        nome_cliente: { type: "string", description: "Nome do cliente, como ele se apresentou." },
+      },
+      required: ["departamento", "assunto"],
+    },
+  },
 ];
 
-async function execAtendenteTool(name, input = {}) {
+async function execAtendenteTool(name, input = {}, remoteJid = null) {
   try {
+    if (name === "avisar_departamento") {
+      const dep = _acharDepto(input.departamento);
+      if (!dep || !dep.tel) return { erro: `Departamento '${input.departamento}' não tem contato cadastrado — não posso avisar; encaminhe internamente.` };
+      const isLid = String(remoteJid || "").endsWith("@lid");
+      const foneCliente = remoteJid && !isLid ? _digits(remoteJid).replace(/^55/, "") : null;
+      const texto = `🔔 *Verti — Pós-Venda 360*\n` +
+        `Um cliente consultou o setor *${dep.depto}*.\n` +
+        `• Assunto: ${input.assunto}\n` +
+        `• Cliente: ${input.nome_cliente || "(não informado)"}\n` +
+        `• WhatsApp: ${foneCliente ? _fmtTel(foneCliente) : "(não identificado)"}\n\n` +
+        `Aviso automático — favor retornar ao cliente.`;
+      const numeroDestino = dep.tel.startsWith("55") ? dep.tel : "55" + dep.tel;
+      const r = await fetch(`${EVO_URL}/message/sendText/pv360`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", apikey: WH_APIKEY() },
+        body: JSON.stringify({ number: numeroDestino, text: texto }),
+      });
+      if (!r.ok) return { erro: `falha ao enviar o aviso (${r.status})` };
+      return { avisado: true, departamento: dep.depto, responsavel: dep.contato || _fmtTel(dep.tel) };
+    }
     if (name === "buscar_cliente") {
       let filtro;
       const mask = _mascaraDoc(input.cnpj_cpf);
@@ -830,7 +881,7 @@ async function callClaudeWithHistory(remoteJid) {
         const toolResults = [];
         for (const b of blocks) {
           if (b.type === "tool_use") {
-            const result = await execAtendenteTool(b.name, b.input || {});
+            const result = await execAtendenteTool(b.name, b.input || {}, remoteJid);
             console.log(`[claude] tool ${b.name}`, JSON.stringify(b.input || {}));
             toolResults.push({ type: "tool_result", tool_use_id: b.id, content: JSON.stringify(result) });
           }
@@ -2333,7 +2384,7 @@ const server = http.createServer(async (req, res) => {
       const claudeKey = ANTHROPIC_KEY();
       const notifyUrl = NOTIFY_URL();
       res.end(JSON.stringify({
-        deploy_version: "verti-2.2-abertura",
+        deploy_version: "verti-2.3-avisar",
         claude_key_set: claudeKey.length > 0,
         claude_key_prefix: claudeKey ? claudeKey.slice(0, 12) + "..." : null,
         claude_model: CLAUDE_MODEL(),
