@@ -62,6 +62,7 @@ const NOTIFY_URL      = () => process.env.NOTIFY_WEBHOOK_URL || ""; // n8n / Sla
 const STT_URL         = () => process.env.STT_URL || "http://72.61.48.156:8090/transcribe";
 const STT_APIKEY      = () => process.env.STT_APIKEY || "b9cf3d5fbd2b1f3559b50e5d5936da0e2e078b841d815a81"; // default p/ sobreviver a deploy (gitignored .env some no republish); repo privado, mesmo padrão dos demais segredos
 const EVO_URL         = "http://72.61.48.156:8080";
+const CRON_KEY        = () => process.env.CRON_KEY || "vp360cron_b7f2a9d1e4"; // protege o endpoint do gatilho (cron do VPS)
 
 const OPEN_STATUSES = ["aberto","em_atendimento","aguardando_cliente","aguardando_interno"];
 
@@ -455,6 +456,61 @@ function buildSystemPrompt() {
   return CLAUDE_BASE_PROMPT + "\n\n" + atendimentoContexto() + blocoContatosDepto();
 }
 
+// ─── Prazo em HORAS ÚTEIS (Seg-Qui 07-18h, Sex 07-17h; pula fim de semana e feriados) ──
+// SP = UTC-3 fixo (Brasil sem horário de verão desde 2019).
+const SP_OFFSET_MS = 3 * 3600 * 1000;
+function _spParts(utcMs) {
+  const d = new Date(utcMs - SP_OFFSET_MS); // campos UTC deste objeto = relógio local de SP
+  return { y: d.getUTCFullYear(), mo: d.getUTCMonth(), da: d.getUTCDate(), dow: d.getUTCDay(),
+    mmdd: String(d.getUTCMonth() + 1).padStart(2, "0") + "-" + String(d.getUTCDate()).padStart(2, "0") };
+}
+const _spToUtcMs = (y, mo, da, h, mi) => Date.UTC(y, mo, da, h + 3, mi); // relógio SP -> instante UTC
+function prazoUtilMs(startMs, minutos) {
+  let cur = startMs, rem = minutos, guard = 0;
+  while (rem > 0 && guard++ < 6000) {
+    const p = _spParts(cur);
+    const win = BUSINESS_HOURS[p.dow];
+    const feriado = !!holidaysFor(p.y)[p.mmdd];
+    if (!win || feriado) { cur = _spToUtcMs(p.y, p.mo, p.da + 1, 0, 0); continue; }
+    const ini = _spToUtcMs(p.y, p.mo, p.da, win[0], 0);
+    const fim = _spToUtcMs(p.y, p.mo, p.da, win[1], 0);
+    if (cur < ini) { cur = ini; continue; }
+    if (cur >= fim) { cur = _spToUtcMs(p.y, p.mo, p.da + 1, 0, 0); continue; }
+    const disp = Math.floor((fim - cur) / 60000);
+    if (rem <= disp) { cur += rem * 60000; rem = 0; } else { rem -= disp; cur = fim; }
+  }
+  return cur;
+}
+
+// ─── GATILHO: cobra o resultado dos handoffs vencidos (chamado pelo cron do VPS) ──────
+async function handleCronHandoffs(req, res) {
+  const json = (s, o) => { res.statusCode = s; res.setHeader("Content-Type", "application/json"); res.end(JSON.stringify(o)); };
+  const key = new URL(req.url || "/", "http://localhost").searchParams.get("key");
+  if (key !== CRON_KEY()) return json(401, { ok: false, error: "unauthorized" });
+  const nowIso = new Date().toISOString();
+  let processados = 0, encontrados = 0;
+  try {
+    const r = await sbFetch(`/rest/v1/handoffs?select=*&status=eq.aguardando&prazo_em=lte.${nowIso}&order=prazo_em.asc&limit=20`);
+    const rows = r.ok ? await r.json() : [];
+    encontrados = rows.length;
+    for (const h of rows) {
+      const texto = `🔔 *Verti — acompanhamento*\n` +
+        `Há ~2h úteis você recebeu a solicitação${h.cliente_nome ? ` do cliente ${h.cliente_nome}` : ""} sobre: ${h.assunto}.\n` +
+        `Conseguiu falar com o cliente? Qual foi o resultado? Pode me responder aqui que eu registro. 🙏`;
+      const numero = String(h.responsavel_tel || "").startsWith("55") ? h.responsavel_tel : "55" + h.responsavel_tel;
+      const send = await fetch(`${EVO_URL}/message/sendText/pv360`, {
+        method: "POST", headers: { "Content-Type": "application/json", apikey: WH_APIKEY() },
+        body: JSON.stringify({ number: numero, text: texto }),
+      });
+      if (send.ok) {
+        await sbFetch(`/rest/v1/handoffs?id=eq.${h.id}`, { method: "PATCH", body: JSON.stringify({ status: "cobrado", cobrado_em: nowIso }) }).catch(() => {});
+        processados++;
+      }
+    }
+  } catch (e) { return json(500, { ok: false, error: e.message }); }
+  return json(200, { ok: true, encontrados, processados, ts: nowIso });
+}
+
 // ─── Acesso ao ERP (bd_Omie) para consultas do atendente ──────────────────────
 const ERP_URL = () => process.env.ERP_URL || "https://kgecbycsyrtdhmdziuul.supabase.co";
 const ERP_KEY = () =>
@@ -684,7 +740,17 @@ async function execAtendenteTool(name, input = {}, remoteJid = null) {
         body: JSON.stringify({ number: numeroDestino, text: texto }),
       });
       if (!r.ok) return { erro: `falha ao enviar o aviso (${r.status})` };
-      return { avisado: true, departamento: dep.depto, responsavel: dep.contato || _fmtTel(dep.tel) };
+      // registra o handoff p/ o gatilho de 2h úteis cobrar o resultado depois
+      const prazo = new Date(prazoUtilMs(Date.now(), 120)).toISOString();
+      await sbFetch("/rest/v1/handoffs", {
+        method: "POST",
+        body: JSON.stringify({
+          departamento: dep.depto, responsavel_tel: dep.tel, assunto: input.assunto,
+          cliente_nome: input.nome_cliente || null, cliente_jid: remoteJid || null,
+          status: "aguardando", prazo_em: prazo,
+        }),
+      }).catch((e) => console.error("[handoff] insert:", e.message));
+      return { avisado: true, departamento: dep.depto, responsavel: dep.contato || _fmtTel(dep.tel), prazo_cobranca: "2h úteis" };
     }
     if (name === "buscar_cliente") {
       let filtro;
@@ -2378,13 +2444,14 @@ const server = http.createServer(async (req, res) => {
     const urlPath = new URL(req.url || "/", "http://localhost").pathname;
 
     // ── API routes interceptadas antes do TanStack ──
+    if (urlPath === "/api/whatsapp/cron-handoffs") { await handleCronHandoffs(req, res); return; }
     if (urlPath === "/api/whatsapp/status") {
       res.statusCode = 200;
       res.setHeader("Content-Type", "application/json");
       const claudeKey = ANTHROPIC_KEY();
       const notifyUrl = NOTIFY_URL();
       res.end(JSON.stringify({
-        deploy_version: "verti-2.3-avisar",
+        deploy_version: "verti-2.4-followup",
         claude_key_set: claudeKey.length > 0,
         claude_key_prefix: claudeKey ? claudeKey.slice(0, 12) + "..." : null,
         claude_model: CLAUDE_MODEL(),
