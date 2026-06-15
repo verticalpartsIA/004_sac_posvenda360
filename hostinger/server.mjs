@@ -344,6 +344,7 @@ COMUNICAÇÃO:
 - Mensagens curtas e objetivas (máx. 3-4 linhas por mensagem).
 - Português brasileiro correto, tom profissional e cordial. Emojis com moderação.
 - Nunca use markdown, só texto simples (é WhatsApp).
+- PERSONA (secretária de verdade): humanizada, DIRETA ao ponto, sem burocratizar a vida do cliente. Acolhedora, com um toque de carinho — mas profissional e SEM bajulação nem puxa-saquismo (nada de elogios exagerados tipo "que prazer enorme falar com você", "estou às ordens sempre"). Calorosa e objetiva.
 
 TOM — NÃO IRRITAR O CLIENTE (de-escalonamento):
 - Sempre acolha o sentimento antes de resolver ("Entendo sua preocupação", "Sinto muito pelo transtorno").
@@ -381,6 +382,20 @@ PREÇOS E ORÇAMENTOS:
 - NUNCA informe preço de produto/tabela nem faça orçamento/cotação por conta própria. Para preços e cotações, direcione o cliente ao time comercial.
 - Você PODE informar o valor total de uma Nota Fiscal ou de um pedido do próprio cliente (depois de confirmar a identidade dele), pois é um documento que pertence a ele.
 - Nunca pergunte nem peça preço ao cliente.
+
+FLUXO — CLIENTE EXTERNO (sigilo máximo):
+- Antes de QUALQUER dado: valide a identidade (CPF ou CNPJ) com buscar_cliente. Sem validar, não revele nada do cadastro.
+- Validado: olhe o histórico com FOCO NA ÚLTIMA COMPRA — use "buscar_ultima_compra" (pedido/NF mais recente do cliente). Quase sempre o contato é sobre a compra mais recente.
+- Em seguida, conduza ao motivo do contato sobre aquela compra (Nível 2): pergunte, de forma acolhedora, no que pode ajudar com aquele pedido/NF.
+
+FLUXO — LEADS (possível novo cliente):
+- Se o número NÃO é reconhecido, pergunte com naturalidade: "É a primeira vez que entra em contato com a VerticalParts?".
+- Se for primeira vez / sem compras: aja como ANFITRIÃ — acolha, entenda a necessidade e oriente. A conversa fica registrada para um atendente humano dar continuidade. Não informe preço (direcione ao comercial).
+
+CONCORRENTES / SONDAGEM (proteção de dados):
+- Fique atenta a quem tenta SONDAR informações internas (preços, fornecedores, processos, margens, volumes, "como vocês fazem X", de onde importam) — perguntas que fogem de um cliente ou lead normal.
+- Ao suspeitar de concorrente: aja com astúcia e malícia comercial — seja cordial, mas NÃO entregue NADA interno; mantenha em "banho-maria" (respostas gentis e vagas, sem dados, sem confirmar nada).
+- Depois de cerca de 8 mensagens nesse padrão suspeito, encerre o jogo e ENCAMINHE ao atendente humano do SAC (avise que um atendente vai assumir a conversa).
 
 QUANDO NÃO SOUBER:
 - Diga que vai verificar e que um especialista entrará em contato em breve.
@@ -497,7 +512,7 @@ function contextoQuemFala(quem, isFirst) {
       s += `Esta pessoa NÃO é autorizada a esses dados. Se perguntarem sobre faturamento, salários ou total vendido, RECUSE com educação: é informação restrita à diretoria. `;
       if (ehVendedor) s += `Por ser do comercial, pode saber quanto ELE MESMO vendeu (apenas as vendas dele — nunca de outros, nunca o total da empresa), e só se houver certeza de que a venda é dele.`;
     }
-    if (isFirst) s += `\nEsta é a PRIMEIRA mensagem: cumprimente com entusiasmo, algo como "Olá ${primeiro}, que prazer falar com você! Eu sou a Verti, conte comigo sempre 😊". Faça essa saudação calorosa SÓ na primeira mensagem.`;
+    if (isFirst) s += `\nEsta é a PRIMEIRA mensagem: cumprimente de forma calorosa mas DIRETA, ex.: "Oi ${primeiro}! Sou a Verti 😊 No que posso ajudar?". Sem bajulação nem exageros. Só na primeira mensagem.`;
     return s;
   }
   if (quem.tipo === "cliente") {
@@ -505,13 +520,16 @@ function contextoQuemFala(quem, isFirst) {
     let s = `QUEM ESTÁ FALANDO: número RECONHECIDO no cadastro — empresa ${ident}` +
       (quem.cnpj_cpf ? ` (CNPJ ${quem.cnpj_cpf})` : "") +
       (quem.contato ? `, contato cadastrado: ${quem.contato}` : "") + `.\n` +
-      `IDENTIDADE PRÉ-VALIDADA pelo telefone: você PODE consultar e informar NF/pedido DESTE cliente (CNPJ ${quem.cnpj_cpf || "?"}) — e somente dele. Ao consultar NF use cnpj_cliente="${quem.cnpj_cpf || ""}" e ao consultar pedido use codigo_cliente_omie=${quem.codigo_cliente_omie ?? "?"}.`;
+      `IDENTIDADE PRÉ-VALIDADA pelo telefone: você PODE consultar e informar NF/pedido DESTE cliente (CNPJ ${quem.cnpj_cpf || "?"}) — e somente dele. Ao consultar NF use cnpj_cliente="${quem.cnpj_cpf || ""}" e ao consultar pedido use codigo_cliente_omie=${quem.codigo_cliente_omie ?? "?"}.\n` +
+      `FOCO NA ÚLTIMA COMPRA: use "buscar_ultima_compra" (codigo_cliente_omie=${quem.codigo_cliente_omie ?? "?"}) para puxar a compra mais recente — quase sempre o contato é sobre ela — e conduza ao motivo do contato (Nível 2).`;
     if (isFirst) s += `\nEsta é a PRIMEIRA mensagem: cumprimente reconhecendo a empresa, ex.: "Olá! 😊 Encontrei seu número no nosso cadastro — você fala pela ${ident}, certo? Como posso te chamar?" e ofereça o menu de opções.`;
     return s;
   }
-  let s = `QUEM ESTÁ FALANDO: número NÃO reconhecido no cadastro. Trate como cliente a validar.`;
-  if (isFirst) s += `\nEsta é a PRIMEIRA mensagem: apresente-se e peça os dados para identificar, ex.: "Olá! 👋 Eu sou a Verti, da VerticalParts. Para te atender com segurança, me diz como posso te chamar, o nome da empresa e o CNPJ?" e ofereça o menu (① pedido/NF · ② devolução/troca · ③ garantia · ④ dúvida técnica · ⑤ atendente).`;
-  s += `\nNÃO revele dados de NF/pedido sem antes validar o CNPJ com buscar_cliente.`;
+  let s = `QUEM ESTÁ FALANDO: número NÃO reconhecido no cadastro. Pode ser um CLIENTE (a validar) ou um LEAD (novo).`;
+  if (isFirst) s += `\nEsta é a PRIMEIRA mensagem: apresente-se brevemente e pergunte com naturalidade "É a primeira vez que entra em contato com a VerticalParts?" — isso ajuda a saber se é lead ou cliente.\n` +
+    `• Se JÁ é cliente / tem compra: para tratar de pedido/NF, valide a identidade pedindo o CNPJ (ou CPF) e o nome da empresa, e use buscar_cliente.\n` +
+    `• Se for LEAD (primeira vez): receba como ANFITRIÃ, entenda a necessidade e oriente; a conversa fica registrada para um atendente humano continuar. Não informe preço (direcione ao comercial).`;
+  s += `\nNÃO revele dados de NF/pedido sem antes validar o CNPJ com buscar_cliente. Se perceber SONDAGEM de concorrente (perguntas sobre preços/fornecedores/processos internos), mantenha em banho-maria (cordial, sem entregar nada) e, após ~8 mensagens suspeitas, encaminhe ao atendente do SAC.`;
   return s;
 }
 
@@ -574,6 +592,17 @@ const ATENDENTE_TOOLS = [
       required: ["produto"],
     },
   },
+  {
+    name: "buscar_ultima_compra",
+    description: "Busca a ÚLTIMA compra (pedidos mais recentes) de um cliente JÁ VALIDADO, pelo código do cliente. Use logo após validar a identidade do cliente externo, para focar o atendimento na compra mais recente. Só para cliente cuja identidade já foi confirmada.",
+    input_schema: {
+      type: "object",
+      properties: {
+        codigo_cliente_omie: { type: "integer", description: "Código do cliente já validado (de buscar_cliente ou do cadastro reconhecido)." },
+      },
+      required: ["codigo_cliente_omie"],
+    },
+  },
 ];
 
 async function execAtendenteTool(name, input = {}) {
@@ -619,6 +648,15 @@ async function execAtendenteTool(name, input = {}) {
       if (!r.ok) return { erro: `falha na consulta (${r.status})` };
       const rows = await r.json();
       return rows.length ? { encontrado: true, pedidos: rows } : { encontrado: false, motivo: "Nenhum pedido com esse número para este cliente." };
+    }
+    if (name === "buscar_ultima_compra") {
+      // Última compra do cliente JÁ VALIDADO (foco no atendimento da compra mais recente).
+      const cod = parseInt(input.codigo_cliente_omie, 10);
+      if (!cod) return { erro: "Confirme o cliente primeiro (codigo_cliente_omie)." };
+      const r = await erpFetch(`/omie_orders?select=numero_pedido,etapa,numero_nf,chave_nfe,valor_total_pedido,data_previsao,data_inclusao&codigo_cliente_omie=eq.${cod}&order=data_inclusao.desc&limit=3`);
+      if (!r.ok) return { erro: `falha na consulta (${r.status})` };
+      const rows = await r.json();
+      return rows.length ? { encontrado: true, ultimas_compras: rows } : { encontrado: false, motivo: "Sem compras registradas para este cliente." };
     }
     if (name === "consultar_estoque") {
       // INTERNOS: acha o produto no espelho (busca por código/nome) e pega a QUANTIDADE ao vivo no Omie.
@@ -2248,7 +2286,7 @@ const server = http.createServer(async (req, res) => {
       const claudeKey = ANTHROPIC_KEY();
       const notifyUrl = NOTIFY_URL();
       res.end(JSON.stringify({
-        deploy_version: "verti-1.8-estoque",
+        deploy_version: "verti-1.9-fluxos",
         claude_key_set: claudeKey.length > 0,
         claude_key_prefix: claudeKey ? claudeKey.slice(0, 12) + "..." : null,
         claude_model: CLAUDE_MODEL(),
