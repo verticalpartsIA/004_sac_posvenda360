@@ -433,7 +433,7 @@ const INTERNAL_CONTACTS = {
   "11992042442": { nome: "Bianca Maeno",        cargo: "Compras Nacionais",                 dept: "Compras" },
   "11934095836": { nome: "Diego Maeno",         cargo: "CEO",                               dept: "Diretoria", nivel: "diretoria" },
   "12992004047": { nome: "Gelson Simões",       cargo: "Consultor Téc Estratégico",         dept: "Engenharia", nivel: "diretoria" },
-  // ⚠️ FALTA o número da Juliana p/ adicionar com nivel:"diretoria" (3ª pessoa autorizada a faturamento/salários).
+  "11974913360": { nome: "Juliana",             cargo: "Diretoria",                         dept: "Diretoria", nivel: "diretoria" },
   "11942501627": { nome: "Alexandre Schmidt",   cargo: "Supervisor de Engenharia",          dept: "Engenharia" },
   "11975269475": { nome: "Felipe Camargo",      cargo: "Jovem Aprendiz",                    dept: "Engenharia" },
   "11999516411": { nome: "Vinicius Ramos Leite", cargo: "Analista de Projetos Sr",          dept: "Engenharia" },
