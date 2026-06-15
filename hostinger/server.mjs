@@ -431,6 +431,7 @@ const INTERNAL_CONTACTS = {
   "11974808436": { nome: "Andreia Oliveira",    cargo: "Auxiliar de Compras",               dept: "Compras" },
   "11992042442": { nome: "Bianca Maeno",        cargo: "Compras Nacionais",                 dept: "Compras" },
   "11934095836": { nome: "Diego Maeno",         cargo: "CEO",                               dept: "Diretoria" },
+  "12992004047": { nome: "Gelson Simões",       cargo: "Consultor Téc Estratégico",         dept: "Engenharia" },
   "11942501627": { nome: "Alexandre Schmidt",   cargo: "Supervisor de Engenharia",          dept: "Engenharia" },
   "11975269475": { nome: "Felipe Camargo",      cargo: "Jovem Aprendiz",                    dept: "Engenharia" },
   "11999516411": { nome: "Vinicius Ramos Leite", cargo: "Analista de Projetos Sr",          dept: "Engenharia" },
