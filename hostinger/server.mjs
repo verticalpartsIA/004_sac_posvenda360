@@ -416,11 +416,11 @@ IMPORTANTE:
 // VAZIO = não configurado. ⚠️ A Verti NUNCA inventa número: se faltar, encaminha à equipe.
 // Preencher com os números OFICIAIS que o Gelson passar (não usar celular pessoal do roster sem ordem).
 const CONTATOS_DEPARTAMENTO = {
-  // "Financeiro": "(11) 9....",
-  // "Vendas": "(11) 9....",
-  // "Expedição": "(11) 9....",
-  // "Marketing": "(11) 9....",
-  // "Engenharia": "(11) 9....",
+  "Financeiro": "(11) 94460-6396 · e-mail: financeiro@verticalparts.com.br",
+  "Vendas": "(11) 94246-4292 (falar com Guilherme)",
+  "Marketing": "(11) 91894-9307",
+  "Engenharia": "(11) 96407-7688",
+  // "Expedição": pendente — Gelson ainda vai passar o número.
 };
 function blocoContatosDepto() {
   const ents = Object.entries(CONTATOS_DEPARTAMENTO);
