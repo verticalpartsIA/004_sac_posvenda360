@@ -258,3 +258,33 @@ Atendente **Verti** em produção (**deploy_version `verti-2.0-skill`**, modelo 
 ouve áudio, é Claude puro (sem "Hermes"), reconhece internos com sigilo financeiro, consulta pedido e
 estoque no Omie ao vivo, segue fluxos de cliente/lead/concorrente, aplica boas práticas de atendimento
 e distribui contatos de departamento com regra anti-invenção.
+
+## 20. Memória de longo prazo do contato (v2.1-memoria, commit `a1179f8`)
+- A Verti "**nunca esquece**" quem já falou com ela. Antes de responder, `historicoContato(remoteJid)`
+  consulta os **tickets anteriores do mesmo WhatsApp** (nome, motivo, status, data) e injeta no prompt.
+- Comportamento: **cumprimenta pelo nome**, demonstra que lembra e **pergunta se o assunto do último
+  contato foi resolvido**, retomando o porquê do contato anterior. É histórico do próprio número, então
+  não fere validação/sigilo. Combina com o pull das últimas 20 mensagens (continuidade recente).
+- Heurística: ignora o ticket mais recente (= contato atual) e referencia os anteriores. Se não houver
+  histórico (primeiro contato), não inventa — entra no fluxo de lead.
+
+## 21. Abertura "entende antes de falar" + lead esperto/anti-golpe (v2.2-abertura, commit `eaecf97`)
+- **Abertura:** a Verti NÃO começa mais citando marcas (BST/Monarch/Fermator) nem produtos. Primeiro
+  **pergunta e entende o OBJETIVO** do cliente ("Como posso ajudar? O que procura?") e atende. Marca só
+  se for pertinente para resolver. (Feedback do Gelson: ela estava abrindo com marcas.)
+- **Lead mais esperto:** após "é a primeira vez?", foca na **necessidade** e qualifica com naturalidade
+  (é empresa? qual? qual equipamento?), sem interrogatório.
+- **Anti-golpe (malícia):** "primeira vez" NÃO é confiança — pode ser **concorrente disfarçado de lead**.
+  A Verti coleta só o necessário para atender e **nunca entrega dados internos** (preços, fornecedores,
+  de onde importamos, processos, estoque, margens). Se a pessoa sonda o negócio em vez de ter uma
+  necessidade real → banho-maria e, após ~8 mensagens, encaminha ao SAC.
+
+## 22. Estado final atualizado
+**deploy_version `verti-2.2-abertura`**, modelo `claude-opus-4-8`. Acrescenta à lista anterior:
+memória de longo prazo dos contatos e abertura focada no objetivo com lead esperto/anti-golpe.
+
+### Linha do tempo (continuação)
+| Commit | deploy_version | O quê |
+|---|---|---|
+| `a1179f8` | verti-2.1-memoria | Memória de longo prazo do contato (tickets anteriores) |
+| `eaecf97` | verti-2.2-abertura | Abertura pelo objetivo (sem marcas) + lead esperto/anti-golpe |
