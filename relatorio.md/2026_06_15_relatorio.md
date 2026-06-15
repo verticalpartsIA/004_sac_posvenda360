@@ -191,3 +191,70 @@ passado pelo Gelson (nome, cargo, depto, celular DDD+número). Quando um desses 
 **No VPS (fora do repo):**
 - `/root/telegram-claude/bridge.py` — modelo Fable 5 → Opus 4.8.
 - `/root/stt-service/` — serviço STT novo (`stt.py`, `.env`, systemd `stt-service.service`).
+
+---
+
+# ADENDO (mesmo dia, 15/06) — evolução v1.7 → v2.0
+
+Continuação do trabalho acima, no mesmo dia. Tudo em produção. Linha do tempo adicional:
+
+| Commit | deploy_version | O quê |
+|---|---|---|
+| `4ce3d47` | verti-1.7-sigilo | Regra de SIGILO TOTAL (faturamento/salários/total vendido só diretoria) |
+| `f00469c` | verti-1.7 | Juliana cadastrada como diretoria |
+| `2b62ea9` | verti-1.8-estoque | Ferramenta `consultar_estoque` (Omie ao vivo) |
+| `9cc4568` | verti-1.9-fluxos | Fluxos: cliente externo (última compra→Nível 2), leads, concorrentes + persona |
+| `e53eda8` | verti-2.0-skill | Skill de atendimento (Gmelius) + contatos por departamento |
+| `64a9fa8` / `83f0342` | verti-2.0 | Cadastro dos 5 contatos de departamento |
+
+## 13. SIGILO de faturamento/salários (v1.7)
+- Regra do Gelson: **todo interno** pode ver pedidos/estoque, MAS **faturamento, salários (nem o
+  próprio) e totais de venda da empresa** ("quanto vendemos") = **SIGILO TOTAL**.
+- **Únicos autorizados:** Diego (CEO), Juliana e Gelson — marcados em `INTERNAL_CONTACTS` com
+  `nivel:"diretoria"`. Reforçado no prompt base e no contexto de interno. Demais internos: a Verti
+  recusa educadamente (informação restrita à diretoria).
+
+## 14. Consulta de ESTOQUE ao vivo (v1.8)
+- Ferramenta **`consultar_estoque`** (só internos): acha o produto no espelho `Produtos_VP` (busca por
+  código ou nome) e pega a **quantidade no Omie em tempo real** — `omieCall("estoque/consulta",
+  "PosicaoEstoque", {codigo_local_estoque, id_prod, cod_int, data})`. Retorna físico/disponível/
+  reservado/mínimo (NÃO expõe custo). Trata múltiplos resultados (pede o código). Validado: espelho
+  dizia 76, Omie ao vivo 56 — confirma a necessidade de ler a fonte.
+
+## 15. Fluxos de atendimento (v1.9)
+- **Cliente externo (sigilo máximo):** valida CPF/CNPJ → **foco na ÚLTIMA COMPRA** (nova ferramenta
+  `buscar_ultima_compra`) → conduz ao motivo do contato (**Nível 2**).
+- **Leads:** pergunta "É a primeira vez que entra em contato com a VerticalParts?", postura de
+  **anfitriã**; conversa registrada (ticket) p/ atendente humano.
+- **Concorrentes/sondagem:** detecta tentativa de sondar dados internos → **banho-maria** (cordial,
+  vago, sem entregar nada) → após **~8 mensagens** suspeitas, **encaminha ao atendente do SAC**.
+- **Preço:** segue PROIBIDO informar preço de produto/serviço; mantida a exceção do **valor da
+  NF/pedido do próprio cliente validado**.
+- **Persona ("secretária real"):** humanizada, direta, acolhedora **sem bajulação/puxa-saquismo**.
+
+## 16. Skill de atendimento (Gmelius) + contatos por departamento (v2.0)
+- **Boas práticas (Gmelius):** escuta ativa + confirmação ("entendi que você precisa de… correto?"),
+  empatia/resiliência, linguagem positiva e direta (sem jargão), resolução estruturada
+  (histórico→causa→caminhos), proatividade.
+- **Contatos por departamento** (`CONTATOS_DEPARTAMENTO`) — a Verti fornece o número quando o cliente
+  pede o contato de um setor. **Regra inviolável:** só fornece número CADASTRADO; se faltar, **NUNCA
+  inventa** — encaminha ao setor e nunca deixa o cliente sem resposta. Cadastrados:
+  - Financeiro: (11) 94460-6396 · financeiro@verticalparts.com.br
+  - Vendas: (11) 94246-4292 (Guilherme) · Marketing: (11) 91894-9307
+  - Engenharia: (11) 96407-7688 · Expedição: (11) 91706-9961 (Danilo, chefe)
+
+## 17. Reconhecimento de colaboradores internos (v1.6, detalhe)
+- `INTERNAL_CONTACTS` com o roster oficial (30 colaboradores: nome/cargo/depto/celular). Reconhece
+  pelo telefone; internos não precisam validar CNPJ e podem consultar pedidos/estoque.
+- A linha **(11) 99766-3780** (antiga "Gelson") é a **linha do bot/Evolution** (atendente Jéssica) —
+  não é cliente. Número pessoal do Gelson: **(12) 99200-4047**.
+
+## 18. Pendências atualizadas
+1. **"Quanto EU vendi" por vendedor** — falta mapear telefone do vendedor → `codVend` (Omie) + consulta de vendas por vendedor.
+2. **Legenda das etapas do Omie** — confirmar com o Gelson o significado de cada etapa (10/20/60/70…) p/ traduzir o status do pedido com precisão.
+
+## 19. Estado final do dia
+Atendente **Verti** em produção (**deploy_version `verti-2.0-skill`**, modelo `claude-opus-4-8`):
+ouve áudio, é Claude puro (sem "Hermes"), reconhece internos com sigilo financeiro, consulta pedido e
+estoque no Omie ao vivo, segue fluxos de cliente/lead/concorrente, aplica boas práticas de atendimento
+e distribui contatos de departamento com regra anti-invenção.
