@@ -416,16 +416,38 @@ function _mascaraDoc(s) {
 
 // ─── Contatos internos (corporativos) — tratamento VIP ────────────────────────
 // Chave = telefone só dígitos, DDD + número (sem o 55). Demais números virão depois.
+// Colaboradores VerticalParts (roster oficial 15/06/2026). Reconhecidos como INTERNOS.
+// OBS: a linha 11997663780 é a do BOT/Evolution (atendente Jéssica), não é cliente — não consta aqui.
 const INTERNAL_CONTACTS = {
-  "11994621946": { nome: "Diego Maeno",      cargo: "CEO",                          dept: "CEO" },
-  "11942464292": { nome: "Guilherme Garcia", cargo: "Líder Comercial",              dept: "Comercial" },
-  "11995578519": { nome: "Victoria Martins", cargo: "Assistente Comercial Pleno",   dept: "Comercial" },
-  "11992042442": { nome: "Bianca Maeno",     cargo: "Analista Jurídico",            dept: "Jurídico" },
-  "11988099494": { nome: "Giovanna Maeno",   cargo: "Marketing",                    dept: "Marketing" },
-  "11974808436": { nome: "Andreia Oliveira", cargo: "Auxiliar de Compras",          dept: "Compras" },
-  "11997663780": { nome: "Gelson Simões",    cargo: "Consultor Técnico Estratégico", dept: "Consultoria Técnica" },
-  "11918243810": { nome: "Matheus Rocha",    cargo: "Assistente de Expedição",      dept: "Logística" },
-  "11910280566": { nome: "Maria Fernanda",   cargo: "Auxiliar de Limpeza",          dept: "Administrativo" },
+  "11973479910": { nome: "Thiago Petricio",     cargo: "Assistente de Almoxarifado",        dept: "Almoxarifado" },
+  "11975246576": { nome: "Brayan Gomes Souza",  cargo: "Técnico Mecatrônico",               dept: "Automação" },
+  "11942464292": { nome: "Guilherme Garcia",    cargo: "Líder Comercial",                   dept: "Comercial" },
+  "11998981275": { nome: "Marcus Augusto Braz", cargo: "Gerente Comercial",                 dept: "Comercial" },
+  "11912314738": { nome: "Patricia Mariano",    cargo: "Consultor Comercial",               dept: "Comercial" },
+  "11999520472": { nome: "Rafael Nunes Neves",  cargo: "Consultor Comercial",               dept: "Comercial" },
+  "11951640001": { nome: "Vagner Gianini",      cargo: "Vendedor",                          dept: "Comercial" },
+  "11995578519": { nome: "Victoria Martins",    cargo: "Assistente Comercial PL",           dept: "Comercial" },
+  "11955997597": { nome: "Albimar Silveira Jr", cargo: "Analista de Importação/Exportação Jr", dept: "Compras" },
+  "11974808436": { nome: "Andreia Oliveira",    cargo: "Auxiliar de Compras",               dept: "Compras" },
+  "11992042442": { nome: "Bianca Maeno",        cargo: "Compras Nacionais",                 dept: "Compras" },
+  "11934095836": { nome: "Diego Maeno",         cargo: "CEO",                               dept: "Diretoria" },
+  "11942501627": { nome: "Alexandre Schmidt",   cargo: "Supervisor de Engenharia",          dept: "Engenharia" },
+  "11975269475": { nome: "Felipe Camargo",      cargo: "Jovem Aprendiz",                    dept: "Engenharia" },
+  "11999516411": { nome: "Vinicius Ramos Leite", cargo: "Analista de Projetos Sr",          dept: "Engenharia" },
+  "11971810361": { nome: "Matheus Rocha",       cargo: "Assistente de Expedição",           dept: "Expedição" },
+  "11944606396": { nome: "Maximira Ribeiro",    cargo: "Assistente Financeiro",             dept: "Financeiro" },
+  "11955887575": { nome: "Karla Ayres",         cargo: "Analista de RH",                    dept: "Gente e Gestão" },
+  "11975341398": { nome: "Neyla Araujo",        cargo: "Assistente de Departamento Pessoal", dept: "Gente e Gestão" },
+  "11918949307": { nome: "Amanda Sales",        cargo: "Estagiária",                        dept: "Marketing" },
+  "11937258080": { nome: "Giovanna Maeno",      cargo: "Gerente de Marketing",              dept: "Marketing/TI" },
+  "11916220666": { nome: "Mauricio Sanchez",    cargo: "Supervisor de Instalação e Montagem", dept: "Montagem" },
+  "11972026426": { nome: "Edmilson de Jesus",   cargo: "Motorista",                         dept: "Motorista" },
+  "11951641767": { nome: "Gesse Batista",       cargo: "Motorista",                         dept: "Motorista" },
+  "11964077688": { nome: "Arilene Avila",       cargo: "Gestora de Operações",              dept: "Operações" },
+  "11955988424": { nome: "Magda Torres",        cargo: "Assistente de PCP",                 dept: "PCP" },
+  "11996246582": { nome: "Jessica Santos",      cargo: "Atendente de Pós-Venda (SAC)",      dept: "Pós-Venda" },
+  "11944931971": { nome: "Caio Richard",        cargo: "Analista de Qualidade Pleno",       dept: "Qualidade" },
+  "11910280566": { nome: "Fernanda Freires",    cargo: "Analista de Suporte de TI Jr",      dept: "TI" },
 };
 
 // Número local (DDD + número), sem o código do país (55)
@@ -460,7 +482,8 @@ async function resolveQuemFala(remoteJid) {
 function contextoQuemFala(quem, isFirst) {
   if (quem.tipo === "interno") {
     const primeiro = quem.nome.split(" ")[0];
-    let s = `QUEM ESTÁ FALANDO: ${quem.nome} — ${quem.cargo} da VerticalParts. É um contato INTERNO/VIP da equipe (não é cliente externo). Pode ser mais aberto e prestativo com ele.`;
+    let s = `QUEM ESTÁ FALANDO: ${quem.nome} — ${quem.cargo}${quem.dept ? `, ${quem.dept}` : ""} da VerticalParts. É um contato INTERNO da equipe (NÃO é cliente externo). Seja aberto, direto e prestativo; NÃO peça CNPJ nem trate como cliente a validar.\n` +
+      `Como é da equipe, ele PODE perguntar sobre QUALQUER pedido/venda (andamento, se foi faturado, se já saiu, previsão). Para STATUS DE PEDIDO use a ferramenta "consultar_pedido_ao_vivo" (consulta o Omie em TEMPO REAL — dado fresco), e não o cadastro. Relate os campos com clareza (etapa/etapa_descricao, previsão, valor, se está bloqueado). Não invente: se o Omie não retornar, diga que não localizou.`;
     if (isFirst) s += `\nEsta é a PRIMEIRA mensagem: cumprimente com entusiasmo, algo como "Olá ${primeiro}, que prazer falar com você! Eu sou a Verti, conte comigo sempre 😊". Faça essa saudação calorosa SÓ na primeira mensagem.`;
     return s;
   }
@@ -516,6 +539,17 @@ const ATENDENTE_TOOLS = [
       required: ["numero_pedido", "codigo_cliente_omie"],
     },
   },
+  {
+    name: "consultar_pedido_ao_vivo",
+    description: "APENAS para colaboradores INTERNOS (equipe VerticalParts): consulta um pedido de venda DIRETO no Omie, em tempo real (dado mais fresco que o cadastro). Use quando QUEM ESTÁ FALANDO é um contato interno/da equipe e pergunta sobre andamento, etapa, faturamento ou previsão de um pedido. NUNCA use para cliente externo.",
+    input_schema: {
+      type: "object",
+      properties: {
+        numero_pedido: { type: "string", description: "Número do pedido de venda" },
+      },
+      required: ["numero_pedido"],
+    },
+  },
 ];
 
 async function execAtendenteTool(name, input = {}) {
@@ -561,6 +595,39 @@ async function execAtendenteTool(name, input = {}) {
       if (!r.ok) return { erro: `falha na consulta (${r.status})` };
       const rows = await r.json();
       return rows.length ? { encontrado: true, pedidos: rows } : { encontrado: false, motivo: "Nenhum pedido com esse número para este cliente." };
+    }
+    if (name === "consultar_pedido_ao_vivo") {
+      // INTERNOS: consulta o pedido DIRETO no Omie (tempo real). Sem trava de cliente —
+      // colaboradores da equipe são confiáveis (a trava existe p/ cliente externo).
+      const num = String(input.numero_pedido || "").replace(/\D/g, "");
+      if (!num) return { erro: "Informe o numero_pedido." };
+      let resp;
+      try {
+        resp = await omieCall("produtos/pedido", "ConsultarPedido", { numero_pedido: num });
+      } catch (e) { return { erro: `Omie indisponível: ${e.message}` }; }
+      const pv = resp?.pedido_venda_produto;
+      if (!pv || resp?.faultstring) return { encontrado: false, motivo: resp?.faultstring || "Pedido não encontrado no Omie." };
+      const cab = pv.cabecalho || {};
+      const inf = pv.informacoes_adicionais || {};
+      const tot = pv.total_pedido || {};
+      let cliente = null;
+      try {
+        const c = await omieCall("geral/clientes", "ConsultarCliente", { codigo_cliente_omie: cab.codigo_cliente });
+        cliente = c?.razao_social || c?.nome_fantasia || null;
+      } catch { /* nome do cliente é opcional */ }
+      // Legenda de etapas (PADRÃO Omie — CONFIRMAR com Gelson p/ esta conta).
+      const LEGENDA = { "00": "Em aberto (não faturado)", "10": "Em aberto (não faturado)",
+        "20": "A faturar", "50": "Em separação / a faturar", "60": "A faturar (liberado)",
+        "70": "Faturado (NF emitida)" };
+      return {
+        encontrado: true, fonte: "Omie ao vivo",
+        numero_pedido: cab.numero_pedido, codigo_pedido: cab.codigo_pedido,
+        cliente, codigo_cliente: cab.codigo_cliente,
+        etapa: cab.etapa, etapa_descricao: LEGENDA[String(cab.etapa)] || `etapa ${cab.etapa} (significado a confirmar)`,
+        bloqueado: cab.bloqueado, data_previsao: cab.data_previsao,
+        valor_total: tot.valor_total_pedido, quantidade_itens: cab.quantidade_itens,
+        codigo_vendedor: inf.codVend,
+      };
     }
     return { erro: "ferramenta desconhecida" };
   } catch (e) {
@@ -2129,7 +2196,7 @@ const server = http.createServer(async (req, res) => {
       const claudeKey = ANTHROPIC_KEY();
       const notifyUrl = NOTIFY_URL();
       res.end(JSON.stringify({
-        deploy_version: "verti-1.5-audio",
+        deploy_version: "verti-1.6-internos-omie",
         claude_key_set: claudeKey.length > 0,
         claude_key_prefix: claudeKey ? claudeKey.slice(0, 12) + "..." : null,
         claude_model: CLAUDE_MODEL(),
