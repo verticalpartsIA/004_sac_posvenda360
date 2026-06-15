@@ -420,7 +420,7 @@ const CONTATOS_DEPARTAMENTO = {
   "Vendas": "(11) 94246-4292 (falar com Guilherme)",
   "Marketing": "(11) 91894-9307",
   "Engenharia": "(11) 96407-7688",
-  // "Expedição": pendente — Gelson ainda vai passar o número.
+  "Expedição": "(11) 91706-9961 (falar com Danilo, chefe da Expedição)",
 };
 function blocoContatosDepto() {
   const ents = Object.entries(CONTATOS_DEPARTAMENTO);
