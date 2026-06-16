@@ -533,10 +533,11 @@ function _mascaraDoc(s) {
 }
 
 // ─── Contatos internos (corporativos) — tratamento VIP ────────────────────────
-// Chave = telefone só dígitos, DDD + número (sem o 55). Demais números virão depois.
-// Colaboradores VerticalParts (roster oficial 15/06/2026). Reconhecidos como INTERNOS.
+// FONTE PRIMÁRIA: tabela Supabase `public.internal_contacts` (editável sem deploy).
+// O objeto abaixo é apenas FALLBACK, usado se o Supabase falhar/voltar vazio.
+// Chave = telefone só dígitos, DDD + número (sem o 55).
 // OBS: a linha 11997663780 é a do BOT/Evolution (atendente Jéssica), não é cliente — não consta aqui.
-const INTERNAL_CONTACTS = {
+const INTERNAL_CONTACTS_FALLBACK = {
   "11973479910": { nome: "Thiago Petricio",     cargo: "Assistente de Almoxarifado",        dept: "Almoxarifado" },
   "11975246576": { nome: "Brayan Gomes Souza",  cargo: "Técnico Mecatrônico",               dept: "Automação" },
   "11942464292": { nome: "Guilherme Garcia",    cargo: "Líder Comercial",                   dept: "Comercial" },
@@ -571,6 +572,37 @@ const INTERNAL_CONTACTS = {
   "11910280566": { nome: "Fernanda Freires",    cargo: "Analista de Suporte de TI Jr",      dept: "TI" },
 };
 
+// Cache em memória dos contatos internos. Fonte: tabela Supabase `internal_contacts`.
+// Recarrega após CONTACTS_TTL_MS; em falha/vazio usa INTERNAL_CONTACTS_FALLBACK.
+const CONTACTS_TTL_MS = 5 * 60 * 1000;
+let _contactsCache = null;
+let _contactsCacheAt = 0;
+async function getInternalContacts() {
+  if (_contactsCache && (Date.now() - _contactsCacheAt) < CONTACTS_TTL_MS) return _contactsCache;
+  try {
+    const r = await sbFetch("/rest/v1/internal_contacts?select=phone,nome,cargo,dept,nivel&ativo=eq.true");
+    if (r.ok) {
+      const rows = await r.json();
+      if (Array.isArray(rows) && rows.length) {
+        const map = {};
+        for (const x of rows) {
+          const k = String(x.phone || "").replace(/\D/g, "");
+          if (!k) continue;
+          map[k] = { nome: x.nome, cargo: x.cargo, dept: x.dept, ...(x.nivel ? { nivel: x.nivel } : {}) };
+        }
+        _contactsCache = map;
+        _contactsCacheAt = Date.now();
+        console.log(`[verti] internal_contacts: ${rows.length} carregados do Supabase`);
+        return map;
+      }
+    }
+    console.warn("[verti] internal_contacts: resposta vazia/erro — usando fallback do código");
+  } catch (e) {
+    console.error("[verti] getInternalContacts:", e.message, "— usando fallback");
+  }
+  return INTERNAL_CONTACTS_FALLBACK;
+}
+
 // Número local (DDD + número), sem o código do país (55)
 function _phoneLocal(remoteJid) {
   let d = _digits(remoteJid);
@@ -581,7 +613,8 @@ function _phoneLocal(remoteJid) {
 // Descobre QUEM está falando: interno (VIP), cliente do cadastro (por telefone) ou desconhecido
 async function resolveQuemFala(remoteJid) {
   const local = _phoneLocal(remoteJid);
-  if (INTERNAL_CONTACTS[local]) return { tipo: "interno", ...INTERNAL_CONTACTS[local] };
+  const contacts = await getInternalContacts();
+  if (contacts[local]) return { tipo: "interno", ...contacts[local] };
   try {
     if (local.length >= 10) {
       const ddd = local.slice(0, 2);
@@ -2452,7 +2485,7 @@ const server = http.createServer(async (req, res) => {
       const claudeKey = ANTHROPIC_KEY();
       const notifyUrl = NOTIFY_URL();
       res.end(JSON.stringify({
-        deploy_version: "verti-2.5-gelson-2onum",
+        deploy_version: "verti-2.6-internos-db",
         claude_key_set: claudeKey.length > 0,
         claude_key_prefix: claudeKey ? claudeKey.slice(0, 12) + "..." : null,
         claude_model: CLAUDE_MODEL(),
