@@ -550,6 +550,7 @@ const INTERNAL_CONTACTS = {
   "11992042442": { nome: "Bianca Maeno",        cargo: "Compras Nacionais",                 dept: "Compras" },
   "11934095836": { nome: "Diego Maeno",         cargo: "CEO",                               dept: "Diretoria", nivel: "diretoria" },
   "12992004047": { nome: "Gelson Simões",       cargo: "Consultor Téc Estratégico",         dept: "Engenharia", nivel: "diretoria" },
+  "11974769151": { nome: "Gelson Simões",       cargo: "Consultor Téc Estratégico",         dept: "Engenharia", nivel: "diretoria" }, // 2º aparelho do Gelson (16/06)
   "11974913360": { nome: "Juliana",             cargo: "Diretoria",                         dept: "Diretoria", nivel: "diretoria" },
   "11942501627": { nome: "Alexandre Schmidt",   cargo: "Supervisor de Engenharia",          dept: "Engenharia" },
   "11975269475": { nome: "Felipe Camargo",      cargo: "Jovem Aprendiz",                    dept: "Engenharia" },
@@ -2451,7 +2452,7 @@ const server = http.createServer(async (req, res) => {
       const claudeKey = ANTHROPIC_KEY();
       const notifyUrl = NOTIFY_URL();
       res.end(JSON.stringify({
-        deploy_version: "verti-2.4-followup",
+        deploy_version: "verti-2.5-gelson-2onum",
         claude_key_set: claudeKey.length > 0,
         claude_key_prefix: claudeKey ? claudeKey.slice(0, 12) + "..." : null,
         claude_model: CLAUDE_MODEL(),
