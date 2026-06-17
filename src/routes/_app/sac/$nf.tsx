@@ -310,8 +310,10 @@ export default function SacNFDetalhe() {
 
   async function salvarExpedicao() {
     // Poka-Yoke: bloqueia se conferência incompleta ou divergência não reportada
+    // Exceção: se data_entrega_real já preenchida (entrega confirmada), a conferência é opcional
     const itensGuard = ((nf as any)?.dados_omie?.det ?? []) as OmieItem[];
-    if (itensGuard.length > 0) {
+    const entregaConfirmada = !!exp.data_entrega_real;
+    if (itensGuard.length > 0 && !entregaConfirmada) {
       const todasOk = itensGuard.every((_, i) => conferencias[i] != null);
       const temDivGuard = itensGuard.some((item, i) => {
         const qtd = item.produto?.quantidade ?? 0;
