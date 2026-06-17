@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { cn } from "@/lib/utils";
-import { ArrowLeft, Save, Truck, MessageCircle, Phone, CheckCircle2, Clock, Package, AlertTriangle, Send, Eye, EyeOff, ClipboardList } from "lucide-react";
+import { ArrowLeft, Save, Truck, MessageCircle, Phone, CheckCircle2, Clock, Package, AlertTriangle, Send, Eye, EyeOff, ClipboardList, Camera, X } from "lucide-react";
 
 export const Route = createFileRoute("/_app/sac/$nf")({
   component: SacNFDetalhe,
@@ -223,6 +223,8 @@ export default function SacNFDetalhe() {
 
   // Conferência de itens (Poka-Yoke)
   const [conferencias, setConferencias] = useState<Record<number, number | null>>({});
+  const [fotosConferencia, setFotosConferencia] = useState<Record<number, string | null>>({});
+  const [uploadingFoto, setUploadingFoto] = useState<Record<number, boolean>>({});
   const [obsDiv, setObsDiv] = useState("");
   const [divergenciaReportada, setDivergenciaReportada] = useState(false);
   const [reportandoDiv, setReportandoDiv] = useState(false);
@@ -299,6 +301,22 @@ export default function SacNFDetalhe() {
     }).then(({ error }) => {
       if (error) console.error("[sac-audit]", error);
     });
+  }
+
+  async function uploadFotoConferencia(idx: number, file: File) {
+    setUploadingFoto((p) => ({ ...p, [idx]: true }));
+    const ext = file.name.split(".").pop() ?? "jpg";
+    const path = `${nfId}/item-${idx}-${Date.now()}.${ext}`;
+    const { error } = await supabase.storage.from("sac-conferencia").upload(path, file, { upsert: true });
+    if (!error) {
+      const { data } = supabase.storage.from("sac-conferencia").getPublicUrl(path);
+      setFotosConferencia((p) => ({ ...p, [idx]: data.publicUrl }));
+    }
+    setUploadingFoto((p) => ({ ...p, [idx]: false }));
+  }
+
+  function removerFotoConferencia(idx: number) {
+    setFotosConferencia((p) => ({ ...p, [idx]: null }));
   }
 
   function calcularStatusEntrega(): NFDetalhe["status_entrega"] {
@@ -617,34 +635,61 @@ export default function SacNFDetalhe() {
               const ok = preenchido && qtdConf === qtdPedida;
               const div = preenchido && qtdConf !== qtdPedida;
               return (
-                <div key={i} className="grid grid-cols-[1fr_72px_88px_44px] gap-2 items-center py-2 border-b last:border-0">
-                  <div>
-                    <p className="text-sm font-medium leading-tight">{item.produto?.descricao ?? `Item ${i + 1}`}</p>
-                    {item.produto?.codigo_produto && (
-                      <p className="text-[11px] text-muted-foreground font-mono">SKU {item.produto.codigo_produto}</p>
-                    )}
+                <div key={i} className="py-2 border-b last:border-0 space-y-2">
+                  <div className="grid grid-cols-[1fr_72px_88px_44px] gap-2 items-center">
+                    <div>
+                      <p className="text-sm font-medium leading-tight">{item.produto?.descricao ?? `Item ${i + 1}`}</p>
+                      {item.produto?.codigo_produto && (
+                        <p className="text-[11px] text-muted-foreground font-mono">SKU {item.produto.codigo_produto}</p>
+                      )}
+                    </div>
+                    <span className="text-center text-sm tabular-nums">{qtdPedida}</span>
+                    <input
+                      type="number"
+                      min={0}
+                      value={qtdConf ?? ""}
+                      placeholder="—"
+                      onChange={(e) => {
+                        const v = e.target.value === "" ? null : Number(e.target.value);
+                        setConferencias((prev) => ({ ...prev, [i]: v }));
+                        if (divergenciaReportada) setDivergenciaReportada(false);
+                      }}
+                      className={cn(
+                        "w-full rounded-lg border px-2 py-1.5 text-sm text-center tabular-nums focus:outline-none focus:ring-1",
+                        ok && "border-green-400 bg-green-50 text-green-800 focus:ring-green-400",
+                        div && "border-red-400 bg-red-50 text-red-800 focus:ring-red-400",
+                        !preenchido && "border-border bg-background focus:ring-ring"
+                      )}
+                    />
+                    <div className="flex justify-center">
+                      {ok && <CheckCircle2 className="h-5 w-5 text-green-500" />}
+                      {div && <AlertTriangle className="h-5 w-5 text-red-500" />}
+                    </div>
                   </div>
-                  <span className="text-center text-sm tabular-nums">{qtdPedida}</span>
-                  <input
-                    type="number"
-                    min={0}
-                    value={qtdConf ?? ""}
-                    placeholder="—"
-                    onChange={(e) => {
-                      const v = e.target.value === "" ? null : Number(e.target.value);
-                      setConferencias((prev) => ({ ...prev, [i]: v }));
-                      if (divergenciaReportada) setDivergenciaReportada(false);
-                    }}
-                    className={cn(
-                      "w-full rounded-lg border px-2 py-1.5 text-sm text-center tabular-nums focus:outline-none focus:ring-1",
-                      ok && "border-green-400 bg-green-50 text-green-800 focus:ring-green-400",
-                      div && "border-red-400 bg-red-50 text-red-800 focus:ring-red-400",
-                      !preenchido && "border-border bg-background focus:ring-ring"
+                  {/* Foto do item conferido */}
+                  <div className="pl-0">
+                    {fotosConferencia[i] ? (
+                      <div className="relative inline-block">
+                        <a href={fotosConferencia[i]!} target="_blank" rel="noopener noreferrer">
+                          <img src={fotosConferencia[i]!} alt={`Foto item ${i + 1}`}
+                            className="h-20 w-28 rounded-lg border object-cover hover:opacity-90 transition-opacity" />
+                        </a>
+                        <button onClick={() => removerFotoConferencia(i)}
+                          className="absolute -top-1.5 -right-1.5 rounded-full bg-red-500 p-0.5 text-white hover:bg-red-600">
+                          <X className="h-3 w-3" />
+                        </button>
+                      </div>
+                    ) : (
+                      <label className={cn(
+                        "inline-flex items-center gap-1.5 cursor-pointer rounded-lg border border-dashed px-3 py-1.5 text-xs text-muted-foreground hover:bg-muted transition-colors",
+                        uploadingFoto[i] && "opacity-50 pointer-events-none"
+                      )}>
+                        <Camera className="h-3.5 w-3.5" />
+                        {uploadingFoto[i] ? "Enviando..." : "Foto do item"}
+                        <input type="file" accept="image/*" capture="environment" className="hidden"
+                          onChange={(e) => { const f = e.target.files?.[0]; if (f) void uploadFotoConferencia(i, f); }} />
+                      </label>
                     )}
-                  />
-                  <div className="flex justify-center">
-                    {ok && <CheckCircle2 className="h-5 w-5 text-green-500" />}
-                    {div && <AlertTriangle className="h-5 w-5 text-red-500" />}
                   </div>
                 </div>
               );
