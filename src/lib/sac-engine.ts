@@ -11,7 +11,7 @@ const getSb = () => {
 };
 
 const EVO_URL = process.env.EVOLUTION_URL ?? "http://72.61.48.156:8080";
-const EVO_KEY = process.env.EVOLUTION_APIKEY ?? (() => { throw new Error("EVOLUTION_APIKEY não definida"); })();
+const EVO_KEY = process.env.EVOLUTION_APIKEY ?? "";
 const EVO_INSTANCE = process.env.EVOLUTION_INSTANCE ?? "pv360";
 
 async function enviarWhatsApp(numero: string, mensagem: string): Promise<boolean> {

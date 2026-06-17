@@ -3,7 +3,14 @@ import { createClient } from "@supabase/supabase-js";
 
 // ─── config ───────────────────────────────────────────────────────────────────
 const EVO_URL     = process.env.EVOLUTION_URL ?? "http://72.61.48.156:8080";
-const EVO_APIKEY  = () => process.env.EVOLUTION_APIKEY ?? (() => { throw new Error("EVOLUTION_APIKEY não definida"); })();
+const EVO_APIKEY  = () => {
+  const key = process.env.EVOLUTION_APIKEY;
+  if (!key) {
+    console.warn("[warn] EVOLUTION_APIKEY não definida — Evolution API indisponível");
+    return "";
+  }
+  return key;
+};
 const EVO_INSTANCE = process.env.EVOLUTION_INSTANCE ?? "pv360";
 
 const SB_URL = process.env.SUPABASE_URL ?? "https://jkbklzlbhhfnamaeislb.supabase.co";

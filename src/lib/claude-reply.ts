@@ -190,7 +190,7 @@ export async function autoReplyWithClaude(params: {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        apikey: process.env.EVOLUTION_APIKEY ?? (() => { throw new Error("EVOLUTION_APIKEY nao definida"); })(),
+        apikey: process.env.EVOLUTION_APIKEY ?? "",
       },
       body: JSON.stringify({ number: sendNumber, text: reply }),
     });
