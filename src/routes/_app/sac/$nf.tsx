@@ -176,7 +176,6 @@ export default function SacNFDetalhe() {
     transportadora_entregou: null as boolean | null,
     data_entrega_real: "",
     comprovante_entrega: "",
-    status_entrega: "EMITIDA" as NFDetalhe["status_entrega"],
   });
   const [savingExp, setSavingExp] = useState(false);
   const [msgExp, setMsgExp] = useState("");
@@ -252,7 +251,6 @@ export default function SacNFDetalhe() {
         transportadora_entregou: n.transportadora_entregou ?? null,
         data_entrega_real: n.data_entrega_real ?? "",
         comprovante_entrega: n.comprovante_entrega ?? "",
-        status_entrega: n.status_entrega,
       });
       setSac({
         previsao_pos_venda: n.previsao_pos_venda ?? "",
@@ -303,6 +301,13 @@ export default function SacNFDetalhe() {
     });
   }
 
+  function calcularStatusEntrega(): NFDetalhe["status_entrega"] {
+    if (exp.data_entrega_real) return "ENTREGUE";
+    if (exp.data_coleta) return "EM_TRANSITO";
+    if (nf?.previsao_entrega && new Date(nf.previsao_entrega + "T23:59:59") < new Date()) return "ATRASADA";
+    return "EMITIDA";
+  }
+
   async function salvarExpedicao() {
     // Poka-Yoke: bloqueia se conferência incompleta ou divergência não reportada
     const itensGuard = ((nf as any)?.dados_omie?.det ?? []) as OmieItem[];
@@ -326,7 +331,7 @@ export default function SacNFDetalhe() {
       transportadora_entregou: exp.tipo_entrega === "TRANSPORTADORA" ? exp.transportadora_entregou : null,
       data_entrega_real: exp.data_entrega_real || null,
       comprovante_entrega: exp.comprovante_entrega || null,
-      status_entrega: exp.status_entrega,
+      status_entrega: calcularStatusEntrega(),
       updated_at: new Date().toISOString(),
     } as any).eq("id", nfId);
 
@@ -336,7 +341,7 @@ export default function SacNFDetalhe() {
       return;
     }
 
-    void writeAuditSac("expedicao_salva", { status_entrega: exp.status_entrega, tipo_entrega: exp.tipo_entrega });
+    void writeAuditSac("expedicao_salva", { status_entrega: calcularStatusEntrega(), tipo_entrega: exp.tipo_entrega });
     setMsgExp("Salvo! Criando tarefa no VP Click...");
     const { error: fnErr } = await supabase.functions.invoke("pv360-delivery-event", {
       body: { nf_id: nfId },
@@ -702,14 +707,18 @@ export default function SacNFDetalhe() {
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
               <label className="block text-xs font-medium text-muted-foreground mb-1">Status da entrega</label>
-              <select value={exp.status_entrega}
-                onChange={(e) => setExp((p) => ({ ...p, status_entrega: e.target.value as NFDetalhe["status_entrega"] }))}
-                className="w-full rounded-lg border bg-background px-3 py-2 text-sm">
-                <option value="EMITIDA">Emitida</option>
-                <option value="EM_TRANSITO">Em trânsito</option>
-                <option value="ENTREGUE">Entregue</option>
-                <option value="ATRASADA">Atrasada</option>
-              </select>
+              {(() => {
+                const s = calcularStatusEntrega();
+                const cfg = STATUS_CONFIG[s];
+                const Icon = cfg.icon;
+                return (
+                  <div className={cn("flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium", cfg.cls)}>
+                    <Icon className="h-4 w-4 shrink-0" />
+                    {cfg.label}
+                    <span className="ml-auto text-xs opacity-60">calculado automaticamente</span>
+                  </div>
+                );
+              })()}
             </div>
             <div>
               <label className="block text-xs font-medium text-muted-foreground mb-1">Tipo de entrega</label>
