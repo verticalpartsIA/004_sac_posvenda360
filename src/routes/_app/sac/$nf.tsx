@@ -220,6 +220,8 @@ export default function SacNFDetalhe() {
   const [obsOmie, setObsOmie] = useState("");
   const [savingObs, setSavingObs] = useState(false);
   const [msgObs, setMsgObs] = useState("");
+  const [enviandoFotosOmie, setEnviandoFotosOmie] = useState(false);
+  const [msgFotosOmie, setMsgFotosOmie] = useState("");
 
   // Conferência de itens (Poka-Yoke)
   const [conferencias, setConferencias] = useState<Record<number, number | null>>({});
@@ -424,6 +426,39 @@ export default function SacNFDetalhe() {
       setMsgObs("Erro de conexão com o servidor.");
     }
     setSavingObs(false);
+  }
+
+  async function enviarFotosOmie() {
+    const fotos = Object.entries(fotosConferencia)
+      .filter(([, url]) => url != null)
+      .map(([idx, url]) => {
+        const item = itensOmie[Number(idx)];
+        const descricao = item?.produto?.descricao ?? `item-${idx}`;
+        const ext = url!.split("?")[0].split(".").pop() ?? "jpg";
+        const nome = `conferencia-${descricao.slice(0, 30).replace(/[^a-zA-Z0-9]/g, "_")}-${idx}.${ext}`;
+        return { url: url!, nome };
+      });
+    if (fotos.length === 0) return;
+    setEnviandoFotosOmie(true);
+    setMsgFotosOmie("");
+    try {
+      const res = await fetch("/api/sac/omie-anexo", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ nf_id: nfId, fotos }),
+      });
+      const data = await res.json() as { error?: string; resultados?: { nome: string; ok: boolean }[] };
+      if (res.ok) {
+        const ok = (data.resultados ?? []).filter((r) => r.ok).length;
+        void writeAuditSac("fotos_enviadas_omie", { quantidade: ok });
+        setMsgFotosOmie(`${ok} foto(s) enviada(s) ao Omie com sucesso!`);
+      } else {
+        setMsgFotosOmie(data.error ?? "Erro ao enviar fotos.");
+      }
+    } catch {
+      setMsgFotosOmie("Erro de conexão com o servidor.");
+    }
+    setEnviandoFotosOmie(false);
   }
 
   async function reportarDivergencia() {
@@ -898,6 +933,54 @@ export default function SacNFDetalhe() {
           </div>
         </div>
       </div>
+
+      {/* ─── FOTOS DA CONFERÊNCIA → OMIE ─── */}
+      {Object.values(fotosConferencia).some((v) => v != null) && (
+        <div className="rounded-xl border bg-card overflow-hidden">
+          <div className="flex items-center gap-2 border-b bg-orange-50 px-5 py-3">
+            <Camera className="h-4 w-4 text-orange-700" />
+            <h2 className="text-sm font-semibold text-orange-800">Fotos da Conferência → Omie</h2>
+            <span className="ml-auto text-[11px] text-orange-500 font-medium">
+              {Object.values(fotosConferencia).filter((v) => v != null).length} foto(s) prontas
+            </span>
+          </div>
+          <div className="p-5 space-y-3">
+            <p className="text-xs text-muted-foreground">
+              As fotos abaixo serão enviadas como <strong>anexos</strong> ao pedido no Omie (aba Anexos da Proposta Comercial).
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {Object.entries(fotosConferencia).filter(([, url]) => url != null).map(([idx, url]) => {
+                const item = itensOmie[Number(idx)];
+                return (
+                  <div key={idx} className="relative">
+                    <a href={url!} target="_blank" rel="noopener noreferrer">
+                      <img src={url!} alt={item?.produto?.descricao ?? `Item ${idx}`}
+                        className="h-16 w-20 rounded-lg border object-cover hover:opacity-90 transition-opacity" />
+                    </a>
+                    <p className="text-[10px] text-muted-foreground text-center mt-0.5 max-w-[80px] truncate">
+                      {item?.produto?.descricao ?? `Item ${idx}`}
+                    </p>
+                  </div>
+                );
+              })}
+            </div>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={enviarFotosOmie}
+                disabled={enviandoFotosOmie}
+                className="inline-flex items-center gap-2 rounded-lg bg-orange-600 px-4 py-2 text-sm font-medium text-white hover:bg-orange-700 disabled:opacity-50">
+                <Camera className="h-4 w-4" />
+                {enviandoFotosOmie ? "Enviando..." : "Enviar fotos ao Omie"}
+              </button>
+              {msgFotosOmie && (
+                <span className={cn("text-sm", msgFotosOmie.startsWith("Erro") ? "text-red-600" : "text-green-600")}>
+                  {msgFotosOmie}
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ─── SEÇÃO 2: CONTROLE SAC ─── */}
       <div className="rounded-xl border bg-card overflow-hidden">

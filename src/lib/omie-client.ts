@@ -89,6 +89,21 @@ export function parseDateBR(dateBR: string): string {
   return `${y}-${m}-${d}`;
 }
 
+export async function incluirAnexoOmie(
+  codigoPedido: number,
+  nomeArquivo: string,
+  mimeType: string,
+  base64Conteudo: string,
+): Promise<void> {
+  await omieCall("geral/anexos", "IncluirAnexo", {
+    nCodigo: codigoPedido,
+    cTabela: "PC",
+    cNome: nomeArquivo,
+    cMimeType: mimeType,
+    cConteudo: base64Conteudo,
+  });
+}
+
 export async function alterarObsPedidoFaturado(codigoPedido: number, novaObs: string): Promise<void> {
   // Tenta buscar obs atual para não sobrescrever
   let obsAtual = "";
