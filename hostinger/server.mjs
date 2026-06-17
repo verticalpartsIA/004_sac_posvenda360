@@ -26,11 +26,10 @@ import { Readable } from "node:stream";
 // Handler nativo Node.js — independente do TanStack Router.
 // URL: POST /api/whatsapp/webhook
 
-const WH_APIKEY       = () => process.env.EVOLUTION_APIKEY || "suporte123";
+// Segredos via painel Passenger (env_present confirmado). Sem fallback hardcoded p/ não expor no git.
+const WH_APIKEY       = () => process.env.EVOLUTION_APIKEY || "";
 const SB_URL          = "https://jkbklzlbhhfnamaeislb.supabase.co";
-const SB_SERVICE_KEY  = () =>
-  process.env.SUPABASE_SERVICE_ROLE_KEY ||
-  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImprYmtsemxiaGhmbmFtYWVpc2xiIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3Nzc5MDM5MywiZXhwIjoyMDkzMzY2MzkzfQ.WoFDfpykUrwQcg0uzDwgfKSwWCy-7zrrJGWGOpo5drs";
+const SB_SERVICE_KEY  = () => process.env.SUPABASE_SERVICE_ROLE_KEY || "";
 
 // ─── VP Click (Supabase) ──────────────────────────────────────────────────────
 const VC_URL = "https://sfpnjwllcmentoocylow.supabase.co";
@@ -513,9 +512,7 @@ async function handleCronHandoffs(req, res) {
 
 // ─── Acesso ao ERP (bd_Omie) para consultas do atendente ──────────────────────
 const ERP_URL = () => process.env.ERP_URL || "https://kgecbycsyrtdhmdziuul.supabase.co";
-const ERP_KEY = () =>
-  process.env.ERP_SERVICE_KEY ||
-  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtnZWNieWNzeXJ0ZGhtZHppdXVsIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NzkyMzE5NiwiZXhwIjoyMDkzNDk5MTk2fQ.mF6ApvDd3dcxjZ1OEgYC86ShpIdMTIMNJCfbZYrX87o";
+const ERP_KEY = () => process.env.ERP_SERVICE_KEY || ""; // no painel Passenger (env_present confirmado)
 function erpFetch(path) {
   const k = ERP_KEY();
   return fetch(`${ERP_URL()}/rest/v1${path}`, {
@@ -2576,7 +2573,7 @@ const server = http.createServer(async (req, res) => {
       const claudeKey = ANTHROPIC_KEY();
       const notifyUrl = NOTIFY_URL();
       res.end(JSON.stringify({
-        deploy_version: "verti-2.8-fix-prefill",
+        deploy_version: "verti-2.9-segredos-painel",
         claude_key_set: claudeKey.length > 0,
         claude_key_prefix: claudeKey ? claudeKey.slice(0, 12) + "..." : null,
         claude_model: CLAUDE_MODEL(),
