@@ -90,17 +90,39 @@ export function parseDateBR(dateBR: string): string {
 }
 
 export async function incluirAnexoOmie(
-  codigoPedido: number,
+  nId: number,
+  cTabela: string,
   nomeArquivo: string,
-  mimeType: string,
-  base64Conteudo: string,
+  tipoArquivo: string,
+  imagemBytes: ArrayBuffer,
+  codIntAnexo: string,
 ): Promise<void> {
-  await omieCall("geral/anexos", "IncluirAnexo", {
-    nCodigo: codigoPedido,
-    cTabela: "PC",
-    cNome: nomeArquivo,
-    cMimeType: mimeType,
-    cConteudo: base64Conteudo,
+  // Omie exige: arquivo comprimido em ZIP → base64, e cMd5 do base64 resultante
+  const { zipSync } = await import("fflate");
+  const { createHash } = await import("node:crypto");
+
+  const bytes = new Uint8Array(imagemBytes);
+  const files: Record<string, Uint8Array> = {};
+  files[nomeArquivo] = bytes;
+  const zipped = zipSync(files);
+
+  // base64 em chunks para evitar stack overflow em imagens grandes
+  let bin = "";
+  const chunk = 8192;
+  for (let i = 0; i < zipped.length; i += chunk) {
+    bin += String.fromCharCode(...zipped.subarray(i, Math.min(i + chunk, zipped.length)));
+  }
+  const zippedBase64 = btoa(bin);
+  const md5Hash = createHash("md5").update(zippedBase64).digest("hex");
+
+  await omieCall("geral/anexo", "IncluirAnexo", {
+    cTabela,
+    nId,
+    cCodIntAnexo: codIntAnexo.slice(0, 20),
+    cNomeArquivo: nomeArquivo,
+    cTipoArquivo: tipoArquivo,
+    cArquivo: zippedBase64,
+    cMd5: md5Hash,
   });
 }
 

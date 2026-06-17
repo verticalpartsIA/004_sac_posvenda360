@@ -10,6 +10,10 @@ const sb = createClient(
 
 type FotoItem = { url: string; nome: string };
 
+function extFromUrl(url: string): string {
+  return url.split("?")[0].split(".").pop()?.toLowerCase() ?? "jpg";
+}
+
 export const APIRoute = createAPIFileRoute("/api/sac/omie-anexo")({
   POST: async ({ request }) => {
     let body: { nf_id?: string; fotos?: FotoItem[] };
@@ -35,7 +39,8 @@ export const APIRoute = createAPIFileRoute("/api/sac/omie-anexo")({
       return Response.json({ error: "NF sem pedido Omie vinculado." }, { status: 422 });
     }
 
-    const codigoPedido = Number(nf.codigo_pedido_omie);
+    // nId do pedido de venda no Omie (tabela "PC" = Proposta Comercial)
+    const nId = Number(nf.codigo_pedido_omie);
     const resultados: { nome: string; ok: boolean; erro?: string }[] = [];
 
     for (const foto of fotos) {
@@ -43,10 +48,14 @@ export const APIRoute = createAPIFileRoute("/api/sac/omie-anexo")({
         const resp = await fetch(foto.url);
         if (!resp.ok) throw new Error(`HTTP ${resp.status} ao baixar foto`);
         const buffer = await resp.arrayBuffer();
-        const base64 = Buffer.from(buffer).toString("base64");
-        const mimeType = resp.headers.get("content-type") ?? "image/jpeg";
-        await incluirAnexoOmie(codigoPedido, foto.nome, mimeType, base64);
-        resultados.push({ nome: foto.nome, ok: true });
+
+        const ext = extFromUrl(foto.url);
+        const nomeArquivo = foto.nome.endsWith(`.${ext}`) ? foto.nome : `${foto.nome}.${ext}`;
+        // cCodIntAnexo: máx 20 chars
+        const codInt = `pv-${nf_id.replace(/-/g, "").slice(0, 17)}`;
+
+        await incluirAnexoOmie(nId, "PC", nomeArquivo, ext, buffer, codInt);
+        resultados.push({ nome: nomeArquivo, ok: true });
       } catch (err) {
         resultados.push({ nome: foto.nome, ok: false, erro: (err as Error).message });
       }
