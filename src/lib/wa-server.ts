@@ -2,14 +2,23 @@ import { createServerFn } from "@tanstack/react-start";
 import { createClient } from "@supabase/supabase-js";
 
 // ─── config ───────────────────────────────────────────────────────────────────
-const EVO_URL     = "http://72.61.48.156:8080";
-const EVO_APIKEY  = () => process.env.EVOLUTION_APIKEY || "suporte123";
-const EVO_INSTANCE = "pv360";
+const EVO_URL     = process.env.EVOLUTION_URL ?? "http://72.61.48.156:8080";
+const EVO_APIKEY  = () => {
+  const key = process.env.EVOLUTION_APIKEY;
+  if (!key) {
+    console.warn("[warn] EVOLUTION_APIKEY não definida — Evolution API indisponível");
+    return "";
+  }
+  return key;
+};
+const EVO_INSTANCE = process.env.EVOLUTION_INSTANCE ?? "pv360";
 
-const SB_URL = "https://jkbklzlbhhfnamaeislb.supabase.co";
-const SB_KEY = () =>
-  process.env.SUPABASE_SERVICE_ROLE_KEY ||
-  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImprYmtsemxiaGhmbmFtYWVpc2xiIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3Nzc5MDM5MywiZXhwIjoyMDkzMzY2MzkzfQ.WoFDfpykUrwQcg0uzDwgfKSwWCy-7zrrJGWGOpo5drs";
+const SB_URL = process.env.SUPABASE_URL ?? "https://jkbklzlbhhfnamaeislb.supabase.co";
+const SB_KEY = () => {
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!key) throw new Error("SUPABASE_SERVICE_ROLE_KEY não definida");
+  return key;
+};
 
 function getSb() {
   return createClient(SB_URL, SB_KEY(), {

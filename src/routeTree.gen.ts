@@ -23,8 +23,10 @@ import { Route as AppNovaOcorrenciaRouteImport } from './routes/_app/nova-ocorre
 import { Route as AppMeusTicketsRouteImport } from './routes/_app/meus-tickets'
 import { Route as AppDashboardRouteImport } from './routes/_app/dashboard'
 import { Route as AppClientesRouteImport } from './routes/_app/clientes'
+import { Route as AppSacIndexRouteImport } from './routes/_app/sac/index'
 import { Route as NpsFormTokenRouteImport } from './routes/nps.form.$token'
 import { Route as AppThreadIdRouteImport } from './routes/_app/thread.$id'
+import { Route as AppSacNfRouteImport } from './routes/_app/sac/$nf'
 import { Route as AppProdutoCodigoRouteImport } from './routes/_app/produto.$codigo'
 import { Route as AppOcorrenciaRoRouteImport } from './routes/_app/ocorrencia.$ro'
 import { Route as AppNpsRespostasRouteImport } from './routes/_app/nps/respostas'
@@ -113,6 +115,11 @@ const AppClientesRoute = AppClientesRouteImport.update({
   path: '/clientes',
   getParentRoute: () => AppRoute,
 } as any)
+const AppSacIndexRoute = AppSacIndexRouteImport.update({
+  id: '/sac/',
+  path: '/sac/',
+  getParentRoute: () => AppRoute,
+} as any)
 const NpsFormTokenRoute = NpsFormTokenRouteImport.update({
   id: '/nps/form/$token',
   path: '/nps/form/$token',
@@ -121,6 +128,11 @@ const NpsFormTokenRoute = NpsFormTokenRouteImport.update({
 const AppThreadIdRoute = AppThreadIdRouteImport.update({
   id: '/thread/$id',
   path: '/thread/$id',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppSacNfRoute = AppSacNfRouteImport.update({
+  id: '/sac/$nf',
+  path: '/sac/$nf',
   getParentRoute: () => AppRoute,
 } as any)
 const AppProdutoCodigoRoute = AppProdutoCodigoRouteImport.update({
@@ -247,8 +259,10 @@ export interface FileRoutesByFullPath {
   '/nps/respostas': typeof AppNpsRespostasRoute
   '/ocorrencia/$ro': typeof AppOcorrenciaRoRouteWithChildren
   '/produto/$codigo': typeof AppProdutoCodigoRoute
+  '/sac/$nf': typeof AppSacNfRoute
   '/thread/$id': typeof AppThreadIdRoute
   '/nps/form/$token': typeof NpsFormTokenRoute
+  '/sac/': typeof AppSacIndexRoute
   '/cliente/$cnpj/historico': typeof AppClienteCnpjHistoricoRoute
   '/ocorrencia/$ro/editar': typeof AppOcorrenciaRoEditarRoute
 }
@@ -282,8 +296,10 @@ export interface FileRoutesByTo {
   '/nps/respostas': typeof AppNpsRespostasRoute
   '/ocorrencia/$ro': typeof AppOcorrenciaRoRouteWithChildren
   '/produto/$codigo': typeof AppProdutoCodigoRoute
+  '/sac/$nf': typeof AppSacNfRoute
   '/thread/$id': typeof AppThreadIdRoute
   '/nps/form/$token': typeof NpsFormTokenRoute
+  '/sac': typeof AppSacIndexRoute
   '/cliente/$cnpj/historico': typeof AppClienteCnpjHistoricoRoute
   '/ocorrencia/$ro/editar': typeof AppOcorrenciaRoEditarRoute
 }
@@ -319,8 +335,10 @@ export interface FileRoutesById {
   '/_app/nps/respostas': typeof AppNpsRespostasRoute
   '/_app/ocorrencia/$ro': typeof AppOcorrenciaRoRouteWithChildren
   '/_app/produto/$codigo': typeof AppProdutoCodigoRoute
+  '/_app/sac/$nf': typeof AppSacNfRoute
   '/_app/thread/$id': typeof AppThreadIdRoute
   '/nps/form/$token': typeof NpsFormTokenRoute
+  '/_app/sac/': typeof AppSacIndexRoute
   '/_app/cliente/$cnpj/historico': typeof AppClienteCnpjHistoricoRoute
   '/_app/ocorrencia/$ro/editar': typeof AppOcorrenciaRoEditarRoute
 }
@@ -356,8 +374,10 @@ export interface FileRouteTypes {
     | '/nps/respostas'
     | '/ocorrencia/$ro'
     | '/produto/$codigo'
+    | '/sac/$nf'
     | '/thread/$id'
     | '/nps/form/$token'
+    | '/sac/'
     | '/cliente/$cnpj/historico'
     | '/ocorrencia/$ro/editar'
   fileRoutesByTo: FileRoutesByTo
@@ -391,8 +411,10 @@ export interface FileRouteTypes {
     | '/nps/respostas'
     | '/ocorrencia/$ro'
     | '/produto/$codigo'
+    | '/sac/$nf'
     | '/thread/$id'
     | '/nps/form/$token'
+    | '/sac'
     | '/cliente/$cnpj/historico'
     | '/ocorrencia/$ro/editar'
   id:
@@ -427,8 +449,10 @@ export interface FileRouteTypes {
     | '/_app/nps/respostas'
     | '/_app/ocorrencia/$ro'
     | '/_app/produto/$codigo'
+    | '/_app/sac/$nf'
     | '/_app/thread/$id'
     | '/nps/form/$token'
+    | '/_app/sac/'
     | '/_app/cliente/$cnpj/historico'
     | '/_app/ocorrencia/$ro/editar'
   fileRoutesById: FileRoutesById
@@ -543,6 +567,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppClientesRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/sac/': {
+      id: '/_app/sac/'
+      path: '/sac'
+      fullPath: '/sac/'
+      preLoaderRoute: typeof AppSacIndexRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/nps/form/$token': {
       id: '/nps/form/$token'
       path: '/nps/form/$token'
@@ -555,6 +586,13 @@ declare module '@tanstack/react-router' {
       path: '/thread/$id'
       fullPath: '/thread/$id'
       preLoaderRoute: typeof AppThreadIdRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/sac/$nf': {
+      id: '/_app/sac/$nf'
+      path: '/sac/$nf'
+      fullPath: '/sac/$nf'
+      preLoaderRoute: typeof AppSacNfRouteImport
       parentRoute: typeof AppRoute
     }
     '/_app/produto/$codigo': {
@@ -735,7 +773,9 @@ interface AppRouteChildren {
   AppNpsRespostasRoute: typeof AppNpsRespostasRoute
   AppOcorrenciaRoRoute: typeof AppOcorrenciaRoRouteWithChildren
   AppProdutoCodigoRoute: typeof AppProdutoCodigoRoute
+  AppSacNfRoute: typeof AppSacNfRoute
   AppThreadIdRoute: typeof AppThreadIdRoute
+  AppSacIndexRoute: typeof AppSacIndexRoute
 }
 
 const AppRouteChildren: AppRouteChildren = {
@@ -763,7 +803,9 @@ const AppRouteChildren: AppRouteChildren = {
   AppNpsRespostasRoute: AppNpsRespostasRoute,
   AppOcorrenciaRoRoute: AppOcorrenciaRoRouteWithChildren,
   AppProdutoCodigoRoute: AppProdutoCodigoRoute,
+  AppSacNfRoute: AppSacNfRoute,
   AppThreadIdRoute: AppThreadIdRoute,
+  AppSacIndexRoute: AppSacIndexRoute,
 }
 
 const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)

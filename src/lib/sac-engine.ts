@@ -1,14 +1,17 @@
 import { createClient } from "@supabase/supabase-js";
 import { classificarABC, parseDateBR, type OmiePedido, type OmieCliente } from "./omie-client";
 
-const SB_URL = "https://jkbklzlbhhfnamaeislb.supabase.co";
-const getSb = () =>
-  createClient(SB_URL, process.env.SUPABASE_SERVICE_ROLE_KEY!, {
+const SB_URL = process.env.SUPABASE_URL ?? "https://jkbklzlbhhfnamaeislb.supabase.co";
+const getSb = () => {
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!key) throw new Error("SUPABASE_SERVICE_ROLE_KEY não definida");
+  return createClient(SB_URL, key, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
+};
 
 const EVO_URL = process.env.EVOLUTION_URL ?? "http://72.61.48.156:8080";
-const EVO_KEY = process.env.EVOLUTION_APIKEY ?? "suporte123";
+const EVO_KEY = process.env.EVOLUTION_APIKEY ?? "";
 const EVO_INSTANCE = process.env.EVOLUTION_INSTANCE ?? "pv360";
 
 async function enviarWhatsApp(numero: string, mensagem: string): Promise<boolean> {

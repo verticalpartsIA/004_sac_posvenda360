@@ -9,6 +9,49 @@ export const Route = createFileRoute("/_app/sac/$nf")({
   component: SacNFDetalhe,
 });
 
+// Feriados nacionais fixos (MM-DD) + Corpus Christi calculado dinamicamente
+function feriadosBR(year: number): Set<string> {
+  const fixos = [
+    `${year}-01-01`, `${year}-04-21`, `${year}-05-01`,
+    `${year}-09-07`, `${year}-10-12`, `${year}-11-02`,
+    `${year}-11-15`, `${year}-12-25`,
+  ];
+  // Páscoa (algoritmo de Meeus/Jones/Butcher)
+  const a = year % 19, b = Math.floor(year / 100), c = year % 100;
+  const d = Math.floor(b / 4), e = b % 4, f = Math.floor((b + 8) / 25);
+  const g = Math.floor((b - f + 1) / 3), h = (19 * a + b - d - g + 15) % 30;
+  const i = Math.floor(c / 4), k = c % 4;
+  const l = (32 + 2 * e + 2 * i - h - k) % 7;
+  const m = Math.floor((a + 11 * h + 22 * l) / 451);
+  const month = Math.floor((h + l - 7 * m + 114) / 31);
+  const day = ((h + l - 7 * m + 114) % 31) + 1;
+  const pascoa = new Date(year, month - 1, day);
+  const offset = (d: number) => new Date(pascoa.getTime() + d * 86400000);
+  const fmt = (dt: Date) => dt.toISOString().slice(0, 10);
+  const moveis = [
+    fmt(offset(-48)), // Carnaval (seg)
+    fmt(offset(-47)), // Carnaval (ter)
+    fmt(offset(-2)),  // Sexta-feira Santa
+    fmt(pascoa),      // Páscoa
+    fmt(offset(60)),  // Corpus Christi
+  ];
+  return new Set([...fixos, ...moveis]);
+}
+
+function addBusinessDays(dateStr: string, days: number): string {
+  const date = new Date(dateStr + "T12:00:00"); // evita timezone shift
+  let added = 0;
+  while (added < days) {
+    date.setDate(date.getDate() + 1);
+    const dow = date.getDay();
+    if (dow === 0 || dow === 6) continue;
+    const feriados = feriadosBR(date.getFullYear());
+    if (feriados.has(date.toISOString().slice(0, 10))) continue;
+    added++;
+  }
+  return date.toISOString().slice(0, 10);
+}
+
 type NFDetalhe = {
   id: string;
   nf_numero: string;
@@ -254,7 +297,7 @@ export default function SacNFDetalhe() {
       action,
       actor_id: user?.id ?? null,
       actor_name: user?.email ?? null,
-      payload: payload ?? null,
+      payload: (payload ?? null) as import("@/integrations/supabase/types").Json,
     }).then(({ error }) => {
       if (error) console.error("[sac-audit]", error);
     });
@@ -729,7 +772,13 @@ export default function SacNFDetalhe() {
             <div>
               <label className="block text-xs font-medium text-muted-foreground mb-1">Data de entrega real</label>
               <input type="date" value={exp.data_entrega_real}
-                onChange={(e) => setExp((p) => ({ ...p, data_entrega_real: e.target.value }))}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setExp((p) => ({ ...p, data_entrega_real: val }));
+                  if (val) {
+                    setSac((p) => ({ ...p, previsao_pos_venda: addBusinessDays(val, 3) }));
+                  }
+                }}
                 className="w-full rounded-lg border bg-background px-3 py-2 text-sm" />
             </div>
             <div className="sm:col-span-2">

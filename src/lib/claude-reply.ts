@@ -2,15 +2,17 @@ import { createClient } from "@supabase/supabase-js";
 
 // ─── config ───────────────────────────────────────────────────────────────────
 const CLAUDE_MODEL  = () => process.env.CLAUDE_MODEL ?? process.env.HERMES_MODEL ?? "claude-opus-4-8";
-const EVO_URL       = "http://72.61.48.156:8080";
+const EVO_URL       = process.env.EVOLUTION_URL ?? "http://72.61.48.156:8080";
 const EVO_INSTANCE  = "pv360";
 const HISTORY_LIMIT = 20;
 const TIMEOUT_MS    = 30_000;
 
-const SB_URL = "https://jkbklzlbhhfnamaeislb.supabase.co";
-const SB_KEY = () =>
-  process.env.SUPABASE_SERVICE_ROLE_KEY ||
-  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImprYmtsemxiaGhmbmFtYWVpc2xiIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3Nzc5MDM5MywiZXhwIjoyMDkzMzY2MzkzfQ.WoFDfpykUrwQcg0uzDwgfKSwWCy-7zrrJGWGOpo5drs";
+const SB_URL = process.env.SUPABASE_URL ?? "https://jkbklzlbhhfnamaeislb.supabase.co";
+const SB_KEY = () => {
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!key) throw new Error("SUPABASE_SERVICE_ROLE_KEY nao definida");
+  return key;
+};
 
 // ─── system prompt ────────────────────────────────────────────────────────────
 const SYSTEM_PROMPT = `Você é um atendente de pós-venda da VerticalParts, empresa especializada em peças para elevadores, escadas rolantes e esteiras (importações e produtos nacionais). Marcas principais: BST, Monarch, Fermator.
@@ -188,7 +190,7 @@ export async function autoReplyWithClaude(params: {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        apikey: process.env.EVOLUTION_APIKEY ?? "suporte123",
+        apikey: process.env.EVOLUTION_APIKEY ?? "",
       },
       body: JSON.stringify({ number: sendNumber, text: reply }),
     });

@@ -651,6 +651,285 @@ export type Database = {
           },
         ]
       }
+      sac_clientes: {
+        Row: {
+          id: string
+          cnpj: string
+          razao_social: string
+          nome_fantasia: string | null
+          classe_abc: string
+          email: string | null
+          telefone: string | null
+          whatsapp: string | null
+          contato: string | null
+          gerente_conta: string | null
+          codigo_omie: number | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          cnpj: string
+          razao_social: string
+          nome_fantasia?: string | null
+          classe_abc?: string
+          email?: string | null
+          telefone?: string | null
+          whatsapp?: string | null
+          contato?: string | null
+          gerente_conta?: string | null
+          codigo_omie?: number | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          cnpj?: string
+          razao_social?: string
+          nome_fantasia?: string | null
+          classe_abc?: string
+          email?: string | null
+          telefone?: string | null
+          whatsapp?: string | null
+          contato?: string | null
+          gerente_conta?: string | null
+          codigo_omie?: number | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      sac_notas_fiscais: {
+        Row: {
+          id: string
+          nf_numero: string
+          cliente_id: string | null
+          cnpj_cliente: string | null
+          razao_social_cliente: string
+          classe_abc: string
+          data_emissao: string | null
+          valor_total: number | null
+          transportadora: string | null
+          codigo_rastreio: string | null
+          previsao_entrega: string | null
+          status_entrega: string
+          data_entrega_real: string | null
+          codigo_pedido_omie: number | null
+          numero_pedido_omie: string | null
+          dados_omie: Json | null
+          pesquisa_enviada: boolean | null
+          pesquisa_enviada_em: string | null
+          chave_nfe: string | null
+          data_coleta: string | null
+          transportadora_entregou: boolean | null
+          comprovante_entrega: string | null
+          previsao_pos_venda: string | null
+          status_pos_venda: string | null
+          data_pos_venda: string | null
+          responsavel_pos_venda: string | null
+          tipo_entrega: string | null
+          retirado_por: string | null
+          obs_omie: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          nf_numero: string
+          cliente_id?: string | null
+          cnpj_cliente?: string | null
+          razao_social_cliente: string
+          classe_abc?: string
+          data_emissao?: string | null
+          valor_total?: number | null
+          transportadora?: string | null
+          codigo_rastreio?: string | null
+          previsao_entrega?: string | null
+          status_entrega?: string
+          data_entrega_real?: string | null
+          codigo_pedido_omie?: number | null
+          numero_pedido_omie?: string | null
+          dados_omie?: Json | null
+          pesquisa_enviada?: boolean | null
+          pesquisa_enviada_em?: string | null
+          chave_nfe?: string | null
+          data_coleta?: string | null
+          transportadora_entregou?: boolean | null
+          comprovante_entrega?: string | null
+          previsao_pos_venda?: string | null
+          status_pos_venda?: string | null
+          data_pos_venda?: string | null
+          responsavel_pos_venda?: string | null
+          tipo_entrega?: string | null
+          retirado_por?: string | null
+          obs_omie?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          nf_numero?: string
+          cliente_id?: string | null
+          cnpj_cliente?: string | null
+          razao_social_cliente?: string
+          classe_abc?: string
+          data_emissao?: string | null
+          valor_total?: number | null
+          transportadora?: string | null
+          codigo_rastreio?: string | null
+          previsao_entrega?: string | null
+          status_entrega?: string
+          data_entrega_real?: string | null
+          codigo_pedido_omie?: number | null
+          numero_pedido_omie?: string | null
+          dados_omie?: Json | null
+          pesquisa_enviada?: boolean | null
+          pesquisa_enviada_em?: string | null
+          chave_nfe?: string | null
+          data_coleta?: string | null
+          transportadora_entregou?: boolean | null
+          comprovante_entrega?: string | null
+          previsao_pos_venda?: string | null
+          status_pos_venda?: string | null
+          data_pos_venda?: string | null
+          responsavel_pos_venda?: string | null
+          tipo_entrega?: string | null
+          retirado_por?: string | null
+          obs_omie?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sac_notas_fiscais_cliente_id_fkey"
+            columns: ["cliente_id"]
+            isOneToOne: false
+            referencedRelation: "sac_clientes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      sac_pesquisas: {
+        Row: {
+          id: string
+          nf_id: string | null
+          token: string | null
+          produto_correto: boolean | null
+          atendeu_prazo: boolean | null
+          recebeu_nota_boleto: boolean | null
+          produto_atendeu_expectativas: boolean | null
+          avaliacao_atendimento: number | null
+          nps_score: number | null
+          dificuldade_compra: boolean | null
+          pontos_positivos: string | null
+          pontos_melhoria: string | null
+          compraria_novamente: boolean | null
+          sugestoes: string | null
+          observacoes: string | null
+          respondida_em: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          nf_id?: string | null
+          token?: string | null
+          produto_correto?: boolean | null
+          atendeu_prazo?: boolean | null
+          recebeu_nota_boleto?: boolean | null
+          produto_atendeu_expectativas?: boolean | null
+          avaliacao_atendimento?: number | null
+          nps_score?: number | null
+          dificuldade_compra?: boolean | null
+          pontos_positivos?: string | null
+          pontos_melhoria?: string | null
+          compraria_novamente?: boolean | null
+          sugestoes?: string | null
+          observacoes?: string | null
+          respondida_em?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          nf_id?: string | null
+          token?: string | null
+          produto_correto?: boolean | null
+          atendeu_prazo?: boolean | null
+          recebeu_nota_boleto?: boolean | null
+          produto_atendeu_expectativas?: boolean | null
+          avaliacao_atendimento?: number | null
+          nps_score?: number | null
+          dificuldade_compra?: boolean | null
+          pontos_positivos?: string | null
+          pontos_melhoria?: string | null
+          compraria_novamente?: boolean | null
+          sugestoes?: string | null
+          observacoes?: string | null
+          respondida_em?: string | null
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sac_pesquisas_nf_id_fkey"
+            columns: ["nf_id"]
+            isOneToOne: false
+            referencedRelation: "sac_notas_fiscais"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      expedicao_conferencias: {
+        Row: {
+          id: string
+          nf_id: string
+          item_idx: number
+          sku: string | null
+          descricao: string | null
+          qtd_pedida: number | null
+          qtd_conferida: number | null
+          divergencia_tipo: string | null
+          obs_divergencia: string | null
+          conferido_em: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          nf_id: string
+          item_idx: number
+          sku?: string | null
+          descricao?: string | null
+          qtd_pedida?: number | null
+          qtd_conferida?: number | null
+          divergencia_tipo?: string | null
+          obs_divergencia?: string | null
+          conferido_em?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          nf_id?: string
+          item_idx?: number
+          sku?: string | null
+          descricao?: string | null
+          qtd_pedida?: number | null
+          qtd_conferida?: number | null
+          divergencia_tipo?: string | null
+          obs_divergencia?: string | null
+          conferido_em?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "expedicao_conferencias_nf_id_fkey"
+            columns: ["nf_id"]
+            isOneToOne: false
+            referencedRelation: "sac_notas_fiscais"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never

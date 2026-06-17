@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
-import { Package, Clock, CheckCircle2, AlertTriangle, RefreshCw, ExternalLink } from "lucide-react";
+import { Package, Clock, CheckCircle2, AlertTriangle, RefreshCw, ExternalLink, Search, X } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/_app/sac/")({
@@ -53,6 +53,7 @@ export default function SacPipeline() {
   const [loading, setLoading] = useState(true);
   const [filtroStatus, setFiltroStatus] = useState<string>("TODOS");
   const [filtroAbc, setFiltroAbc] = useState<string>("TODOS");
+  const [busca, setBusca] = useState("");
 
   async function carregar() {
     setLoading(true);
@@ -67,9 +68,16 @@ export default function SacPipeline() {
 
   useEffect(() => { void carregar(); }, []);
 
+  const termoBusca = busca.trim().toLowerCase();
   const filtradas = nfs.filter((n) => {
     if (filtroStatus !== "TODOS" && n.status_entrega !== filtroStatus) return false;
     if (filtroAbc !== "TODOS" && n.classe_abc !== filtroAbc) return false;
+    if (termoBusca) {
+      const pedido = (n.numero_pedido_omie ?? "").toLowerCase();
+      const nfNum = (n.nf_numero ?? "").toLowerCase();
+      const cliente = n.razao_social_cliente.toLowerCase();
+      if (!pedido.includes(termoBusca) && !nfNum.includes(termoBusca) && !cliente.includes(termoBusca)) return false;
+    }
     return true;
   });
 
@@ -91,6 +99,26 @@ export default function SacPipeline() {
         <button onClick={carregar} className="flex items-center gap-2 rounded-lg border px-3 py-2 text-sm hover:bg-muted">
           <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} /> Atualizar
         </button>
+      </div>
+
+      {/* Campo de busca */}
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+        <input
+          type="text"
+          value={busca}
+          onChange={(e) => setBusca(e.target.value)}
+          placeholder="Buscar por Nº pedido, NF ou cliente..."
+          className="w-full rounded-lg border bg-background pl-9 pr-9 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+        />
+        {busca && (
+          <button
+            onClick={() => setBusca("")}
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        )}
       </div>
 
       {/* KPI cards */}
@@ -133,7 +161,9 @@ export default function SacPipeline() {
           <div className="flex items-center justify-center py-16 text-muted-foreground text-sm">Carregando...</div>
         ) : filtradas.length === 0 ? (
           <div className="flex items-center justify-center py-16 text-muted-foreground text-sm">
-            Nenhuma NF encontrada. Configure o webhook no Omie para sincronizar automaticamente.
+            {termoBusca
+              ? `Nenhum resultado para "${busca}".`
+              : "Nenhuma NF encontrada. Configure o webhook no Omie para sincronizar automaticamente."}
           </div>
         ) : (
           <table className="w-full text-sm">
@@ -157,8 +187,8 @@ export default function SacPipeline() {
                 return (
                   <tr key={nf.id} className="border-b last:border-0 hover:bg-muted/20 transition-colors">
                     <td className="px-4 py-3">
-                      <span className="font-semibold tabular-nums">{nf.numero_pedido_omie ?? "—"}</span>
-                      {nf.nf_numero && nf.nf_numero !== nf.numero_pedido_omie && (
+                      <span className="font-semibold tabular-nums">{nf.numero_pedido_omie ?? nf.nf_numero ?? "—"}</span>
+                      {nf.nf_numero && (
                         <span className="block text-[10px] text-muted-foreground font-mono">NF {nf.nf_numero}</span>
                       )}
                     </td>
