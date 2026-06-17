@@ -976,6 +976,24 @@ async function anthropicCall(payload, { tries = 3 } = {}) {
   return null;
 }
 
+// A API da Anthropic — e o opus-4-8 em especial, que NÃO aceita prefill de assistant — exige que o
+// array de mensagens COMECE e TERMINE com o papel "user". O histórico vem do WhatsApp e pode terminar
+// numa fala do bot (resposta, eco de envio ou fallback) → "must end with a user message" (HTTP 400).
+// Normalizamos: (1) tira assistants presos no começo; (2) tira assistants presos no fim;
+// (3) funde turnos consecutivos do mesmo papel (blinda contra qualquer regra de alternância).
+function normalizeForAnthropic(history) {
+  const msgs = history.slice();
+  while (msgs.length && msgs[0].role === "assistant") msgs.shift();
+  while (msgs.length && msgs[msgs.length - 1].role === "assistant") msgs.pop();
+  const merged = [];
+  for (const m of msgs) {
+    const last = merged[merged.length - 1];
+    if (last && last.role === m.role) last.content += "\n" + m.content;
+    else merged.push({ role: m.role, content: m.content });
+  }
+  return merged;
+}
+
 async function callClaudeWithHistory(remoteJid) {
   const apiKey = ANTHROPIC_KEY();
   if (!apiKey) return null;
@@ -984,17 +1002,24 @@ async function callClaudeWithHistory(remoteJid) {
   let history = [];
   try {
     const r = await sbFetch(
-      `/rest/v1/whatsapp_messages?select=body,from_me&remote_jid=eq.${encodeURIComponent(remoteJid)}&order=created_at.asc&limit=20`,
+      `/rest/v1/whatsapp_messages?select=body,from_me,raw&remote_jid=eq.${encodeURIComponent(remoteJid)}&order=created_at.asc&limit=20`,
     );
     if (r.ok) {
       const rows = await r.json();
-      history = (rows || []).map((m) => ({
-        role: m.from_me ? "assistant" : "user",
-        content: m.body,
-      }));
+      history = (rows || [])
+        // Descarta as mensagens automáticas de espera (fallback): NÃO são turnos reais da Verti
+        // e, sendo do bot (assistant), empurram o histórico a terminar em "assistant" — o que o
+        // opus-4-8 rejeita (HTTP 400 "must end with a user message") e reinicia o loop de fallback.
+        .filter((m) => !(m.from_me && m.raw && m.raw.fallback))
+        .filter((m) => m.body && m.body.trim())
+        .map((m) => ({
+          role: m.from_me ? "assistant" : "user",
+          content: m.body,
+        }));
     }
   } catch (e) { console.error("[claude] history fetch error:", e.message); }
 
+  history = normalizeForAnthropic(history);
   if (history.length === 0) return null;
 
   // Quem está falando (interno/cliente reconhecido/desconhecido) + se é a 1ª mensagem
@@ -2551,7 +2576,7 @@ const server = http.createServer(async (req, res) => {
       const claudeKey = ANTHROPIC_KEY();
       const notifyUrl = NOTIFY_URL();
       res.end(JSON.stringify({
-        deploy_version: "verti-2.7-resiliencia",
+        deploy_version: "verti-2.8-fix-prefill",
         claude_key_set: claudeKey.length > 0,
         claude_key_prefix: claudeKey ? claudeKey.slice(0, 12) + "..." : null,
         claude_model: CLAUDE_MODEL(),
