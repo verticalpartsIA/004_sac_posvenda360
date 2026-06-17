@@ -1,6 +1,6 @@
 const OMIE_URL = process.env.OMIE_API_URL ?? "https://app.omie.com.br/api/v1";
-const APP_KEY = process.env.OMIE_APP_KEY!;
-const APP_SECRET = process.env.OMIE_APP_SECRET!;
+const APP_KEY = process.env.OMIE_APP_KEY ?? "8463170967";
+const APP_SECRET = process.env.OMIE_APP_SECRET ?? "69e22b773842044fdb218178521cac59";
 
 async function omieCall<T>(endpoint: string, call: string, param: unknown): Promise<T> {
   const res = await fetch(`${OMIE_URL}/${endpoint}/`, {
@@ -87,4 +87,35 @@ export function parseDateBR(dateBR: string): string {
   // DD/MM/YYYY → YYYY-MM-DD
   const [d, m, y] = dateBR.split("/");
   return `${y}-${m}-${d}`;
+}
+
+export async function alterarObsPedidoFaturado(codigoPedido: number, novaObs: string): Promise<void> {
+  // Tenta buscar obs atual para não sobrescrever
+  let obsAtual = "";
+  try {
+    const pedido = await consultarPedido(codigoPedido);
+    obsAtual = pedido.observacoes?.obs_venda ?? "";
+  } catch {
+    // segue sem obs anterior
+  }
+  const dataHoje = new Date().toLocaleDateString("pt-BR");
+  const linha = `PV360 ${dataHoje}: ${novaObs.trim()}`;
+  const obsCompleta = obsAtual ? `${obsAtual}\n${linha}` : linha;
+
+  // Tenta wrapper padrão; se falhar, tenta formato plano
+  try {
+    await omieCall("produtos/pedido", "AlterarPedFaturado", {
+      pedido_venda_produto: {
+        cabecalho: { codigo_pedido: codigoPedido },
+        observacoes: { obs_venda: obsCompleta },
+      },
+    });
+  } catch (e1) {
+    await omieCall("produtos/pedido", "AlterarPedFaturado", {
+      codigo_pedido: codigoPedido,
+      obs_venda: obsCompleta,
+    }).catch((e2) => {
+      throw new Error(`Omie não aceitou a alteração: ${(e2 as Error).message} (antes: ${(e1 as Error).message})`);
+    });
+  }
 }
