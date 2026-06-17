@@ -297,7 +297,7 @@ export default function SacNFDetalhe() {
       action,
       actor_id: user?.id ?? null,
       actor_name: user?.email ?? null,
-      payload: payload ?? null,
+      payload: (payload ?? null) as import("@/integrations/supabase/types").Json,
     }).then(({ error }) => {
       if (error) console.error("[sac-audit]", error);
     });
