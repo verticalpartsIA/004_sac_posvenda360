@@ -768,12 +768,8 @@ async function execAtendenteTool(name, input = {}, remoteJid = null) {
         `• WhatsApp: ${foneCliente ? _fmtTel(foneCliente) : "(não identificado)"}\n\n` +
         `Aviso automático — favor retornar ao cliente.`;
       const numeroDestino = dep.tel.startsWith("55") ? dep.tel : "55" + dep.tel;
-      const r = await fetch(`${EVO_URL}/message/sendText/pv360`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", apikey: WH_APIKEY() },
-        body: JSON.stringify({ number: numeroDestino, text: texto }),
-      });
-      if (!r.ok) return { erro: `falha ao enviar o aviso (${r.status})` };
+      const sent = await evoSendText(numeroDestino, texto);
+      if (!sent.ok) return { erro: `falha ao enviar o aviso (${sent.error})` };
       // registra o handoff p/ o gatilho de 2h úteis cobrar o resultado depois
       const prazo = new Date(prazoUtilMs(Date.now(), 120)).toISOString();
       await sbFetch("/rest/v1/handoffs", {
@@ -922,6 +918,64 @@ async function historicoContato(remoteJid) {
   } catch { return ""; }
 }
 
+// ─── Robustez: envio de WhatsApp com timeout + retry (Evolution não pode travar a resposta) ──
+async function evoSendText(number, text, { tries = 2 } = {}) {
+  let lastErr = "sem tentativa";
+  for (let i = 0; i < tries; i++) {
+    try {
+      const r = await fetch(`${EVO_URL}/message/sendText/pv360`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", apikey: WH_APIKEY() },
+        body: JSON.stringify({ number, text }),
+        signal: AbortSignal.timeout(15_000),
+      });
+      if (r.ok) return { ok: true };
+      lastErr = `HTTP ${r.status}`;
+      // 4xx (ex.: número inexistente) não melhora repetindo
+      if (r.status >= 400 && r.status < 500) {
+        console.error("[evo] sendText", lastErr, (await r.text().catch(() => "")).slice(0, 200));
+        return { ok: false, error: lastErr };
+      }
+    } catch (e) { lastErr = e.message; }
+    if (i < tries - 1) await new Promise((res) => setTimeout(res, 800 * (i + 1)));
+  }
+  console.error("[evo] sendText falhou:", lastErr);
+  return { ok: false, error: lastErr };
+}
+
+// ─── Robustez: chamada à Anthropic com retry em sobrecarga/timeout (429/5xx/abort) ──
+async function anthropicCall(payload, { tries = 3 } = {}) {
+  const apiKey = ANTHROPIC_KEY();
+  if (!apiKey) return null;
+  let lastErr = "sem tentativa";
+  for (let i = 0; i < tries; i++) {
+    try {
+      const r = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": apiKey,
+          "anthropic-version": "2023-06-01",
+        },
+        body: JSON.stringify(payload),
+        signal: AbortSignal.timeout(45_000),
+      });
+      if (r.ok) return await r.json();
+      const status = r.status;
+      lastErr = `HTTP ${status}`;
+      console.error("[claude] HTTP", status, (await r.text().catch(() => "")).slice(0, 300));
+      // só vale repetir em sobrecarga/erro de servidor; 4xx (exceto 429) é definitivo
+      if (status !== 429 && status < 500) return null;
+    } catch (e) {
+      lastErr = e.message;
+      console.error(`[claude] erro de rede (tentativa ${i + 1}/${tries}):`, e.message);
+    }
+    if (i < tries - 1) await new Promise((res) => setTimeout(res, 1200 * (i + 1)));
+  }
+  console.error("[claude] falhou após", tries, "tentativas:", lastErr);
+  return null;
+}
+
 async function callClaudeWithHistory(remoteJid) {
   const apiKey = ANTHROPIC_KEY();
   if (!apiKey) return null;
@@ -950,53 +1004,47 @@ async function callClaudeWithHistory(remoteJid) {
   const sysPrompt = buildSystemPrompt() + "\n\n" + contextoQuemFala(quem, isFirst) + memoria;
 
   const messages = history;
-  try {
-    // Loop de tool use: Claude pode consultar o ERP antes de responder
-    for (let turn = 0; turn < 5; turn++) {
-      const r = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-api-key": apiKey,
-          "anthropic-version": "2023-06-01",
-        },
-        body: JSON.stringify({
-          model: CLAUDE_MODEL(),
-          max_tokens: 1024,
-          system: sysPrompt,
-          tools: ATENDENTE_TOOLS,
-          messages,
-        }),
-        signal: AbortSignal.timeout(30_000),
-      });
-      if (!r.ok) {
-        console.error("[claude] HTTP", r.status, await r.text().catch(() => ""));
-        return null;
-      }
-      const data = await r.json();
-      const blocks = data.content || [];
+  // Loop de tool use: Claude pode consultar o ERP antes de responder
+  for (let turn = 0; turn < 5; turn++) {
+    const data = await anthropicCall({
+      model: CLAUDE_MODEL(),
+      max_tokens: 1500,
+      system: sysPrompt,
+      tools: ATENDENTE_TOOLS,
+      messages,
+    });
+    if (!data) return null; // falha dura (já tentou com retry) → automateIncoming envia o fallback
 
-      if (data.stop_reason === "tool_use") {
-        messages.push({ role: "assistant", content: blocks });
-        const toolResults = [];
-        for (const b of blocks) {
-          if (b.type === "tool_use") {
-            const result = await execAtendenteTool(b.name, b.input || {}, remoteJid);
-            console.log(`[claude] tool ${b.name}`, JSON.stringify(b.input || {}));
-            toolResults.push({ type: "tool_result", tool_use_id: b.id, content: JSON.stringify(result) });
-          }
+    const blocks = data.content || [];
+
+    if (data.stop_reason === "tool_use") {
+      messages.push({ role: "assistant", content: blocks });
+      const toolResults = [];
+      for (const b of blocks) {
+        if (b.type === "tool_use") {
+          const result = await execAtendenteTool(b.name, b.input || {}, remoteJid);
+          console.log(`[claude] tool ${b.name}`, JSON.stringify(b.input || {}));
+          toolResults.push({ type: "tool_result", tool_use_id: b.id, content: JSON.stringify(result) });
         }
-        messages.push({ role: "user", content: toolResults });
-        continue; // próxima volta: Claude usa os resultados das consultas
       }
-
-      // Resposta final em texto
-      const text = blocks.filter((b) => b.type === "text").map((b) => b.text).join("\n").trim();
-      return text || null;
+      messages.push({ role: "user", content: toolResults });
+      continue; // próxima volta: Claude usa os resultados das consultas
     }
-    console.error("[claude] limite de turnos de tool_use atingido");
+
+    // Resposta final em texto
+    const text = blocks.filter((b) => b.type === "text").map((b) => b.text).join("\n").trim();
+    if (text) return text;
+
+    // Resposta cortada no limite de tokens sem texto útil: pede uma versão curta e fecha o turno
+    if (data.stop_reason === "max_tokens") {
+      console.warn("[claude] resposta cortada (max_tokens) — pedindo versão curta");
+      messages.push({ role: "assistant", content: "..." });
+      messages.push({ role: "user", content: "Responda ao cliente agora, de forma curta e direta, sem usar ferramentas." });
+      continue;
+    }
     return null;
-  } catch (e) { console.error("[claude] call error:", e.message); }
+  }
+  console.error("[claude] limite de turnos de tool_use atingido");
   return null;
 }
 
@@ -1086,47 +1134,65 @@ async function automateIncoming({ remoteJid, pushName, displayBody, insertedId, 
   const autoReply = (process.env.CLAUDE_AUTO_REPLY || process.env.HERMES_AUTO_REPLY || "").toLowerCase() === "true";
   if (autoReply) {
     let replyText = await callClaudeWithHistory(remoteJid);
-    if (replyText) {
-      // Áudio: a Verti reconhece que ouviu o áudio e então responde (tudo em texto).
-      if (audioTranscript) replyText = `🎙️ Entendi seu áudio: "${audioTranscript}"\n\n${replyText}`;
-      try {
-        const sendNumber = isLid ? remoteJid : phone;
-        const r = await fetch(`http://72.61.48.156:8080/message/sendText/pv360`, {
+
+    // REGRA DE OURO: a Verti NUNCA fica muda. Se o Claude falhar (timeout/sobrecarga, mesmo
+    // após retries), mandamos uma mensagem de acolhimento e escalamos o ticket p/ atendente humano.
+    let usedFallback = false;
+    if (!replyText) {
+      replyText = "Recebi sua mensagem e já estou acionando nosso time para te atender, tá? Em breve retornamos por aqui. 🙏";
+      usedFallback = true;
+      console.warn("[automate] Claude sem resposta — enviando fallback p/", remoteJid);
+    }
+
+    // Áudio: a Verti reconhece que ouviu o áudio e então responde (tudo em texto).
+    if (audioTranscript) replyText = `🎙️ Entendi seu áudio: "${audioTranscript}"\n\n${replyText}`;
+
+    const sendNumber = isLid ? remoteJid : phone;
+    const sent = await evoSendText(sendNumber, replyText);
+    if (sent.ok) {
+      // Salva resposta no Supabase
+      const srRes = await sbFetch("/rest/v1/whatsapp_messages", {
+        method: "POST",
+        body: JSON.stringify({
+          instance: "pv360",
+          remote_jid: remoteJid,
+          from_me: true,
+          body: replyText,
+          raw: { auto_reply: true, fallback: usedFallback },
+        }),
+      });
+      // Salva no ticket
+      if (openTicket && srRes.ok) {
+        await sbFetch("/rest/v1/ticket_messages", {
           method: "POST",
-          headers: { "Content-Type": "application/json", apikey: WH_APIKEY() },
-          body: JSON.stringify({ number: sendNumber, text: replyText }),
-        });
-        if (!r.ok) {
-          console.error("[automate] Evolution send error:", await r.json().catch(() => ({})));
-        } else {
-          // Salva resposta no Supabase
-          const srRes = await sbFetch("/rest/v1/whatsapp_messages", {
-            method: "POST",
-            body: JSON.stringify({
-              instance: "pv360",
-              remote_jid: remoteJid,
-              from_me: true,
-              body: replyText,
-              raw: { auto_reply: true },
-            }),
-          });
-          // Salva no ticket
-          if (openTicket && srRes.ok) {
-            await sbFetch("/rest/v1/ticket_messages", {
-              method: "POST",
-              body: JSON.stringify({
-                ticket_id:   openTicket.id,
-                kind:        "whatsapp",
-                author_name: "Claude (VerticalParts Bot)",
-                body:        replyText,
-              }),
-            }).catch(() => {});
-          }
-          console.log(`[automate] ✅ Claude respondeu para ${contactName}: "${replyText.slice(0, 60)}..."`);
-        }
-      } catch (e) { console.error("[automate] reply send error:", e.message); }
+          body: JSON.stringify({
+            ticket_id:   openTicket.id,
+            kind:        "whatsapp",
+            author_name: usedFallback ? "Sistema (resposta automática de espera)" : "Claude (VerticalParts Bot)",
+            body:        replyText,
+          }),
+        }).catch(() => {});
+      }
+      console.log(`[automate] ${usedFallback ? "⚠️ fallback" : "✅ Claude"} respondeu para ${contactName}: "${replyText.slice(0, 60)}..."`);
     } else {
-      console.warn("[automate] Claude sem resposta para", remoteJid);
+      console.error("[automate] Evolution send error:", sent.error);
+    }
+
+    // Falhou a IA: sobe o ticket p/ atendimento humano (prioridade alta + nota interna).
+    if (usedFallback && openTicket) {
+      await sbFetch(`/rest/v1/tickets?id=eq.${openTicket.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ priority: "alta" }),
+      }).catch(() => {});
+      await sbFetch("/rest/v1/ticket_messages", {
+        method: "POST",
+        body: JSON.stringify({
+          ticket_id:   openTicket.id,
+          kind:        "nota_interna",
+          author_name: "Sistema",
+          body:        "⚠️ A Verti não conseguiu responder automaticamente (falha na IA após retries). O cliente recebeu uma mensagem de espera — favor assumir o atendimento.",
+        }),
+      }).catch(() => {});
     }
   }
 
@@ -2485,7 +2551,7 @@ const server = http.createServer(async (req, res) => {
       const claudeKey = ANTHROPIC_KEY();
       const notifyUrl = NOTIFY_URL();
       res.end(JSON.stringify({
-        deploy_version: "verti-2.6-internos-db",
+        deploy_version: "verti-2.7-resiliencia",
         claude_key_set: claudeKey.length > 0,
         claude_key_prefix: claudeKey ? claudeKey.slice(0, 12) + "..." : null,
         claude_model: CLAUDE_MODEL(),
