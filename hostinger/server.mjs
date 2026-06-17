@@ -2586,6 +2586,16 @@ const server = http.createServer(async (req, res) => {
         notify_url_set: notifyUrl.length > 0,
         evolution_apikey: WH_APIKEY().slice(0, 4) + "...",
         env_file_loaded: !!process.env.SUPABASE_SERVICE_ROLE_KEY,
+        // Diagnóstico de segredos: quais chaves vêm do PAINEL (process.env) — sem expor valores.
+        // Se true, o fallback hardcoded no código é redundante e pode ser removido com segurança.
+        env_present: {
+          ANTHROPIC_API_KEY: !!process.env.ANTHROPIC_API_KEY,
+          SUPABASE_SERVICE_ROLE_KEY: !!process.env.SUPABASE_SERVICE_ROLE_KEY,
+          ERP_SERVICE_KEY: !!process.env.ERP_SERVICE_KEY,
+          STT_APIKEY: !!process.env.STT_APIKEY,
+          EVOLUTION_APIKEY: !!process.env.EVOLUTION_APIKEY,
+          CLAUDE_MODEL: !!process.env.CLAUDE_MODEL,
+        },
         ts: new Date().toISOString(),
       }));
       return;
