@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth";
 import { useEffect, useRef, useState } from "react";
 
+
 type NavItem = { to: string; label: string; icon: typeof LayoutDashboard; roles?: ("operador" | "gestor" | "admin")[] };
 type NavGroup = { title: string; items: NavItem[] };
 
@@ -63,24 +64,18 @@ export function AppLayout() {
   const navigate = useNavigate();
   const { user, roles, signOut } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
-  const [expanded, setExpanded] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
-  const sidebarRef = useRef<HTMLElement | null>(null);
   const userMenuRef = useRef<HTMLDivElement | null>(null);
 
-  // Fecha sidebar/menu de usuário ao clicar fora
   useEffect(() => {
     function onDown(e: MouseEvent) {
-      if (expanded && sidebarRef.current && !sidebarRef.current.contains(e.target as Node)) {
-        setExpanded(false);
-      }
       if (userMenuOpen && userMenuRef.current && !userMenuRef.current.contains(e.target as Node)) {
         setUserMenuOpen(false);
       }
     }
     document.addEventListener("mousedown", onDown);
     return () => document.removeEventListener("mousedown", onDown);
-  }, [expanded, userMenuOpen]);
+  }, [userMenuOpen]);
 
   const visible = groups
     .map((g) => ({
@@ -93,39 +88,26 @@ export function AppLayout() {
 
   return (
     <div className="min-h-screen bg-muted/30">
-      {/* Dark sidebar inteligente: 70px → 240px no hover */}
-      <aside
-        ref={sidebarRef}
-        onMouseEnter={() => setExpanded(true)}
-        className={cn(
-          "fixed inset-y-0 left-0 z-40 hidden lg:flex transition-[width] duration-300 ease-out",
-          expanded ? "w-[240px]" : "w-[70px]",
-        )}
-      >
+      {/* Sidebar fixa sempre expandida */}
+      <aside className="fixed inset-y-0 left-0 z-40 hidden lg:flex w-[240px]">
         <div className="flex w-full flex-col overflow-hidden bg-[#141416] text-white ring-1 ring-white/5">
-          <div className={cn("flex flex-col items-center gap-2 px-2 pb-3 pt-5 transition-all", expanded && "px-4")}>
+          <div className="flex flex-col items-center gap-2 px-4 pb-3 pt-5">
             <img
               src="https://sfpnjwllcmentoocylow.supabase.co/storage/v1/object/public/avatars/avatars/CINZA%20E%20AMARELO.png"
               alt="VerticalParts"
-              className={cn("w-auto object-contain transition-all", expanded ? "h-11" : "h-8")}
+              className="h-11 w-auto object-contain"
             />
-            {expanded && (
-              <div className="flex items-baseline gap-1 animate-fade-in">
-                <span className="text-[10px] font-semibold uppercase tracking-[0.22em] text-white/70">Pós-Venda</span>
-                <span className="text-[11px] font-bold text-gold">360°</span>
-              </div>
-            )}
+            <div className="flex items-baseline gap-1">
+              <span className="text-[10px] font-semibold uppercase tracking-[0.22em] text-white/70">Pós-Venda</span>
+              <span className="text-[11px] font-bold text-gold">360°</span>
+            </div>
           </div>
-          <nav className={cn("flex-1 overflow-y-auto overflow-x-hidden pb-4 transition-all", expanded ? "px-3" : "px-2")}>
+          <nav className="flex-1 overflow-y-auto overflow-x-hidden px-3 pb-4">
             {visible.map((g) => (
               <div key={g.title} className="mb-4">
-                {expanded ? (
-                  <div className="px-3 pb-2 pt-2 text-[10px] font-semibold uppercase tracking-[0.22em] text-white/35 animate-fade-in">
-                    {g.title}
-                  </div>
-                ) : (
-                  <div className="mx-auto my-2 h-px w-6 bg-white/10" />
-                )}
+                <div className="px-3 pb-2 pt-2 text-[10px] font-semibold uppercase tracking-[0.22em] text-white/35">
+                  {g.title}
+                </div>
                 <div className="space-y-1">
                   {g.items.map((n) => {
                     const active = path === n.to || path.startsWith(n.to + "/");
@@ -134,17 +116,15 @@ export function AppLayout() {
                       <Link
                         key={n.to}
                         to={n.to}
-                        title={!expanded ? n.label : undefined}
                         className={cn(
-                          "flex items-center gap-3 rounded-lg py-2 text-[13px] font-medium transition-colors",
-                          expanded ? "px-3" : "justify-center px-0",
+                          "flex items-center gap-3 rounded-lg px-3 py-2 text-[13px] font-medium transition-colors",
                           active
                             ? "bg-white/[0.06] text-white ring-1 ring-white/10 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]"
                             : "text-white/60 hover:bg-white/[0.04] hover:text-white",
                         )}
                       >
                         <Icon className="h-[18px] w-[18px] shrink-0" />
-                        {expanded && <span className="truncate animate-fade-in">{n.label}</span>}
+                        <span className="truncate">{n.label}</span>
                       </Link>
                     );
                   })}
@@ -152,17 +132,15 @@ export function AppLayout() {
               </div>
             ))}
           </nav>
-          {expanded && (
-            <div className="border-t border-white/5 p-3 animate-fade-in">
-              <div className="flex items-center gap-3 rounded-lg bg-white/[0.03] px-2.5 py-2">
-                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gold text-black text-[11px] font-bold">{initials}</div>
-                <div className="flex-1 min-w-0">
-                  <div className="truncate text-xs font-medium text-white">{user?.email}</div>
-                  <div className="text-[10px] uppercase tracking-wider text-white/45">{roles.join(" · ") || "—"}</div>
-                </div>
+          <div className="border-t border-white/5 p-3">
+            <div className="flex items-center gap-3 rounded-lg bg-white/[0.03] px-2.5 py-2">
+              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gold text-black text-[11px] font-bold">{initials}</div>
+              <div className="flex-1 min-w-0">
+                <div className="truncate text-xs font-medium text-white">{user?.email}</div>
+                <div className="text-[10px] uppercase tracking-wider text-white/45">{roles.join(" · ") || "—"}</div>
               </div>
             </div>
-          )}
+          </div>
         </div>
       </aside>
 
@@ -202,7 +180,7 @@ export function AppLayout() {
         </div>
       )}
 
-      <main className="lg:pl-[70px]">
+      <main className="lg:pl-[240px]">
         <div className="sticky top-0 z-20 hidden items-center justify-between border-b bg-background/80 px-8 py-4 backdrop-blur lg:flex">
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <Search className="h-4 w-4" />
