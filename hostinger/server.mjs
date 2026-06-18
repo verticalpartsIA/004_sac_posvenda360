@@ -2478,8 +2478,73 @@ async function handleExpedicaoDivergencia(req, res) {
   return json(200, { ok: true });
 }
 
+// POST /api/sac/sync-faturamento
+async function handleSyncFaturamento(req, res) {
+  const jsonR = (s, o) => { res.statusCode = s; res.setHeader("Content-Type","application/json"); res.setHeader("Access-Control-Allow-Origin","*"); res.end(JSON.stringify(o)); };
+  if (req.method === "OPTIONS") { res.statusCode=204; res.setHeader("Access-Control-Allow-Origin","*"); res.setHeader("Access-Control-Allow-Methods","POST,OPTIONS"); res.setHeader("Access-Control-Allow-Headers","Content-Type,Authorization"); return res.end(); }
+  if (req.method !== "POST") return jsonR(405, { error: "Method Not Allowed" });
+  function parseDateBR(s) { if (!s || s==="00/00/0000") return null; const [d,m,y]=s.split("/"); return `${y}-${m}-${d}`; }
+  try {
+    const nfRows = await sbFetch(`/rest/v1/sac_notas_fiscais?select=id,codigo_pedido_omie&codigo_pedido_omie=not.is.null&limit=200`,{method:"GET"}).then(r=>r.json()).catch(()=>[]);
+    if (!Array.isArray(nfRows)||!nfRows.length) return jsonR(200,{ok:true,atualizados:0});
+    let atualizados=0; const erros=[]; const LOTE=10;
+    for (let i=0;i<nfRows.length;i+=LOTE) {
+      const batch=nfRows.slice(i,i+LOTE);
+      await Promise.all(batch.map(async(nf)=>{
+        const codigo=Number(nf.codigo_pedido_omie); if(!codigo) return;
+        try {
+          const result=await omieCall("produtos/pedido","ConsultarPedido",{codigo_pedido:codigo});
+          const info=result?.pedido_venda_produto?.infoCadastro;
+          const faturado=info?.faturado==="S";
+          const dataFat=parseDateBR(info?.dFat);
+          await sbFetch(`/rest/v1/sac_notas_fiscais?id=eq.${encodeURIComponent(nf.id)}`,{method:"PATCH",body:JSON.stringify({faturado,data_faturamento:dataFat,updated_at:new Date().toISOString()})});
+          atualizados++;
+        } catch(e) { erros.push(`pedido ${codigo}: ${e.message}`); }
+      }));
+      if (i+LOTE<nfRows.length) await new Promise(r=>setTimeout(r,200));
+    }
+    return jsonR(200,{ok:true,atualizados,erros:erros.length?erros:undefined});
+  } catch(e) { console.error("[sync-faturamento]",e.message); return jsonR(500,{error:e.message}); }
+}
+
+// POST /api/sac/omie-anexo
+async function handleSacOmieAnexo(req, res) {
+  const jsonR = (s, o) => { res.statusCode = s; res.setHeader("Content-Type","application/json"); res.setHeader("Access-Control-Allow-Origin","*"); res.end(JSON.stringify(o)); };
+  if (req.method === "OPTIONS") { res.statusCode=204; res.setHeader("Access-Control-Allow-Origin","*"); res.setHeader("Access-Control-Allow-Methods","POST,OPTIONS"); res.setHeader("Access-Control-Allow-Headers","Content-Type,Authorization"); return res.end(); }
+  if (req.method !== "POST") return jsonR(405, { error: "Method Not Allowed" });
+  let body; try { body=JSON.parse(await readBody(req)); } catch { return jsonR(400,{error:"Invalid JSON"}); }
+  const {nf_id,fotos}=body??{};
+  if (!nf_id||!Array.isArray(fotos)||!fotos.length) return jsonR(400,{error:"nf_id e fotos[] são obrigatórios"});
+  const nfRows=await sbFetch(`/rest/v1/sac_notas_fiscais?id=eq.${encodeURIComponent(nf_id)}&select=codigo_pedido_omie&limit=1`,{method:"GET"}).then(r=>r.json()).catch(()=>[]);
+  const nf=Array.isArray(nfRows)?nfRows[0]:null;
+  if (!nf) return jsonR(404,{error:"NF não encontrada"});
+  if (!nf.codigo_pedido_omie) return jsonR(422,{error:"NF sem pedido Omie vinculado."});
+  const {zipSync}=await import("fflate");
+  const {createHash}=await import("node:crypto");
+  const nId=Number(nf.codigo_pedido_omie);
+  const resultados=[];
+  for (const foto of fotos) {
+    try {
+      const resp=await fetch(foto.url); if(!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const buffer=await resp.arrayBuffer();
+      const ext=foto.url.split("?")[0].split(".").pop()?.toLowerCase()??"jpg";
+      const nomeArquivo=foto.nome.endsWith(`.${ext}`)?foto.nome:`${foto.nome}.${ext}`;
+      const codInt=`pv-${nf_id.replace(/-/g,"").slice(0,17)}`;
+      const bytes=new Uint8Array(buffer); const files={}; files[nomeArquivo]=bytes;
+      const zipped=zipSync(files); let bin=""; const chunk=8192;
+      for (let i=0;i<zipped.length;i+=chunk) bin+=String.fromCharCode(...zipped.subarray(i,Math.min(i+chunk,zipped.length)));
+      const zippedBase64=btoa(bin);
+      const md5Hash=createHash("md5").update(zippedBase64).digest("hex");
+      await omieCall("geral/anexo","IncluirAnexo",{cTabela:"PC",nId,cCodIntAnexo:codInt.slice(0,20),cNomeArquivo:nomeArquivo,cTipoArquivo:ext,cArquivo:zippedBase64,cMd5:md5Hash});
+      resultados.push({nome:nomeArquivo,ok:true});
+    } catch(e) { resultados.push({nome:foto.nome,ok:false,erro:e.message}); }
+  }
+  const falhas=resultados.filter(r=>!r.ok);
+  if (falhas.length===fotos.length) return jsonR(500,{error:"Todas as fotos falharam",detalhes:resultados});
+  return jsonR(200,{ok:true,resultados});
+}
+
 // POST /api/sac/backfill
-// Body (opcional): { "data_de": "01/05/2026", "data_ate": "11/06/2026" }
 // Busca pedidos faturados (etapa=60) no Omie e ingere no sac_notas_fiscais.
 // Idempotente: se a NF já existe, faz PATCH. Não envia WhatsApp (skipNotify).
 
@@ -2671,6 +2736,14 @@ const server = http.createServer(async (req, res) => {
     }
     if (urlPath === "/api/sac/expedicao-divergencia") {
       await handleExpedicaoDivergencia(req, res);
+      return;
+    }
+    if (urlPath === "/api/sac/sync-faturamento") {
+      await handleSyncFaturamento(req, res);
+      return;
+    }
+    if (urlPath === "/api/sac/omie-anexo") {
+      await handleSacOmieAnexo(req, res);
       return;
     }
     if (urlPath === "/api/sac/backfill") {
