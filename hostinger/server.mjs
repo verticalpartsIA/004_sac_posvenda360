@@ -1743,8 +1743,21 @@ async function handleLidAgendaDelete(req, res) {
 // POST /api/webhooks/omie       ← Omie chama quando pedido é faturado / NF emitida
 // POST /api/sac/enviar-pesquisa ← disparo manual de pesquisa via WhatsApp
 
-const OMIE_APP_KEY    = () => process.env.OMIE_APP_KEY    || "8463170967";
-const OMIE_APP_SECRET = () => process.env.OMIE_APP_SECRET || "69e22b773842044fdb218178521cac59";
+// Auto-detect: app_key is always numeric (~10 digits); app_secret is 32-char hex.
+// Handles the case where the env vars are stored in the wrong names.
+function resolveOmieKeys() {
+  const a = (process.env.OMIE_APP_KEY    || "").trim();
+  const b = (process.env.OMIE_APP_SECRET || "").trim();
+  const isKey    = (s) => /^\d{8,12}$/.test(s);
+  const isSecret = (s) => /^[0-9a-fA-F]{32}$/.test(s);
+  if (isKey(a) && isSecret(b)) return { key: a, secret: b };
+  if (isKey(b) && isSecret(a)) return { key: b, secret: a }; // swapped
+  // fallback to hardcoded defaults
+  return { key: "8463170967", secret: "69e22b773842044fdb218178521cac59" };
+}
+const _omieKeys   = resolveOmieKeys();
+const OMIE_APP_KEY    = () => _omieKeys.key;
+const OMIE_APP_SECRET = () => _omieKeys.secret;
 const EVO_URL_SAC     = () => process.env.EVOLUTION_URL   || "http://72.61.48.156:8080";
 const EVO_INSTANCE    = () => process.env.EVOLUTION_INSTANCE || "pv360";
 
