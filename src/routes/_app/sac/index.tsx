@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
-import { Package, Clock, CheckCircle2, AlertTriangle, RefreshCw, ExternalLink, Search, X } from "lucide-react";
+import { Package, Clock, CheckCircle2, AlertTriangle, RefreshCw, ExternalLink, Search, X, FileCheck, FileX } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/_app/sac/")({
@@ -174,6 +174,7 @@ export default function SacPipeline() {
                 <th className="px-4 py-3 text-center">Classe</th>
                 <th className="px-4 py-3 text-left">Emissão</th>
                 <th className="px-4 py-3 text-left">Previsão</th>
+                <th className="px-4 py-3 text-center">NF emitida</th>
                 <th className="px-4 py-3 text-left">Status</th>
                 <th className="px-4 py-3 text-left">SAC</th>
                 <th className="px-4 py-3 text-center">Pesquisa</th>
@@ -188,9 +189,6 @@ export default function SacPipeline() {
                   <tr key={nf.id} className="border-b last:border-0 hover:bg-muted/20 transition-colors">
                     <td className="px-4 py-3">
                       <span className="font-semibold tabular-nums">{nf.numero_pedido_omie ?? nf.nf_numero ?? "—"}</span>
-                      {nf.nf_numero && (
-                        <span className="block text-[10px] text-muted-foreground font-mono">NF {nf.nf_numero}</span>
-                      )}
                     </td>
                     <td className="px-4 py-3 max-w-[200px] truncate">{nf.razao_social_cliente}</td>
                     <td className="px-4 py-3 text-center">
@@ -200,6 +198,20 @@ export default function SacPipeline() {
                     </td>
                     <td className="px-4 py-3 tabular-nums">{nf.data_emissao ? new Date(nf.data_emissao + "T12:00:00").toLocaleDateString("pt-BR") : "—"}</td>
                     <td className="px-4 py-3 tabular-nums">{nf.previsao_entrega ? new Date(nf.previsao_entrega + "T12:00:00").toLocaleDateString("pt-BR") : "—"}</td>
+                    <td className="px-4 py-3 text-center">
+                      {nf.nf_numero
+                        ? (
+                          <span className="inline-flex flex-col items-center gap-0.5">
+                            <FileCheck className="h-4 w-4 text-green-600" />
+                            <span className="text-[10px] text-green-700 font-mono tabular-nums">{nf.nf_numero}</span>
+                          </span>
+                        ) : (
+                          <span className="inline-flex flex-col items-center gap-0.5">
+                            <FileX className="h-4 w-4 text-muted-foreground" />
+                            <span className="text-[10px] text-muted-foreground">Pendente</span>
+                          </span>
+                        )}
+                    </td>
                     <td className="px-4 py-3">
                       <span className={cn("inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] font-medium", cfg.color)}>
                         <Icon className="h-3 w-3" />{cfg.label}
