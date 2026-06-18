@@ -2722,6 +2722,28 @@ const server = http.createServer(async (req, res) => {
       await handleOmieWebhook(req, res);
       return;
     }
+    if (urlPath === "/api/sac/test-omie") {
+      // Diagnóstico temporário — remover após resolver
+      const key = process.env.OMIE_APP_KEY || "(nao_definida)";
+      const sec = process.env.OMIE_APP_SECRET || "(nao_definida)";
+      let omieResult = "não testado";
+      try {
+        const r = await fetch("https://app.omie.com.br/api/v1/produtos/pedido/", {
+          method: "POST", headers: {"Content-Type":"application/json"},
+          body: JSON.stringify({call:"ConsultarPedido",app_key:key==="(nao_definida)"?"8463170967":key,app_secret:sec==="(nao_definida)"?"69e22b773842044fdb218178521cac59":sec,param:[{codigo_pedido:9210312680}]}),
+          signal: AbortSignal.timeout(10000),
+        });
+        const d = await r.json();
+        omieResult = d.faultstring ? `ERRO: ${d.faultstring}` : `OK faturado=${d?.pedido_venda_produto?.infoCadastro?.faturado}`;
+      } catch(e) { omieResult = `EXCEPTION: ${e.message}`; }
+      res.statusCode = 200; res.setHeader("Content-Type","application/json");
+      res.end(JSON.stringify({
+        OMIE_APP_KEY_len: key.length, OMIE_APP_KEY_4chars: key.slice(0,4),
+        OMIE_APP_SECRET_len: sec.length, OMIE_APP_SECRET_4chars: sec.slice(0,4),
+        omie_test: omieResult,
+      }));
+      return;
+    }
     if (urlPath === "/api/sac/enviar-pesquisa") {
       await handleSacEnviarPesquisa(req, res);
       return;
