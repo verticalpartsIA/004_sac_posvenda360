@@ -2657,9 +2657,6 @@ const server = http.createServer(async (req, res) => {
           STT_APIKEY: !!process.env.STT_APIKEY,
           EVOLUTION_APIKEY: !!process.env.EVOLUTION_APIKEY,
           CLAUDE_MODEL: !!process.env.CLAUDE_MODEL,
-          OMIE_APP_KEY: !!process.env.OMIE_APP_KEY,
-          OMIE_APP_SECRET: !!process.env.OMIE_APP_SECRET,
-          OMIE_APP_KEY_val: (process.env.OMIE_APP_KEY || "").slice(0,4) || "(fallback)",
         },
         ts: new Date().toISOString(),
       }));
