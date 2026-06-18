@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
-import { Package, Clock, CheckCircle2, AlertTriangle, RefreshCw, ExternalLink, Search, X, FileCheck, FileX } from "lucide-react";
+import { Package, Clock, CheckCircle2, AlertTriangle, RefreshCw, ExternalLink, Search, X, CheckCircle, XCircle } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/_app/sac/")({
@@ -180,7 +180,7 @@ export default function SacPipeline() {
                 <th className="px-4 py-3 text-center">Classe</th>
                 <th className="px-4 py-3 text-left">Emissão</th>
                 <th className="px-4 py-3 text-left">Previsão</th>
-                <th className="px-4 py-3 text-center">NF emitida</th>
+                <th className="px-4 py-3 text-center">Faturado</th>
                 <th className="px-4 py-3 text-left">Status</th>
                 <th className="px-4 py-3 text-left">SAC</th>
                 <th className="px-4 py-3 text-center">Pesquisa</th>
@@ -195,6 +195,9 @@ export default function SacPipeline() {
                   <tr key={nf.id} className="border-b last:border-0 hover:bg-muted/20 transition-colors">
                     <td className="px-4 py-3">
                       <span className="font-semibold tabular-nums">{nf.numero_pedido_omie ?? nf.nf_numero ?? "—"}</span>
+                      {nf.nf_numero && (
+                        <span className="block text-[10px] text-muted-foreground font-mono">NF {nf.nf_numero}</span>
+                      )}
                     </td>
                     <td className="px-4 py-3 max-w-[200px] truncate">{nf.razao_social_cliente}</td>
                     <td className="px-4 py-3 text-center">
@@ -207,18 +210,15 @@ export default function SacPipeline() {
                     <td className="px-4 py-3 text-center">
                       {nf.faturado
                         ? (
-                          <span className="inline-flex flex-col items-center gap-0.5" title={nf.data_faturamento ? `Faturado em ${new Date(nf.data_faturamento + "T12:00:00").toLocaleDateString("pt-BR")}` : "Faturado"}>
-                            <FileCheck className="h-4 w-4 text-green-600" />
-                            {nf.data_faturamento && (
-                              <span className="text-[10px] text-green-700 tabular-nums">
-                                {new Date(nf.data_faturamento + "T12:00:00").toLocaleDateString("pt-BR")}
-                              </span>
-                            )}
+                          <span className="inline-flex flex-col items-center gap-0.5"
+                            title={nf.data_faturamento ? `Faturado em ${new Date(nf.data_faturamento + "T12:00:00").toLocaleDateString("pt-BR")}` : "Faturado"}>
+                            <CheckCircle className="h-4 w-4 text-green-600" />
+                            <span className="text-[10px] font-semibold text-green-700">Sim</span>
                           </span>
                         ) : (
                           <span className="inline-flex flex-col items-center gap-0.5" title="Ainda não faturado no Omie">
-                            <FileX className="h-4 w-4 text-muted-foreground" />
-                            <span className="text-[10px] text-muted-foreground">Não</span>
+                            <XCircle className="h-4 w-4 text-red-400" />
+                            <span className="text-[10px] text-red-500">Não</span>
                           </span>
                         )}
                     </td>

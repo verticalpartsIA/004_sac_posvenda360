@@ -29,51 +29,77 @@ function parseDateBR(dateBR: string | undefined): string | null {
   return `${y}-${m}-${d}`;
 }
 
+type OmiePedidoListItem = {
+  cabecalho: { codigo_pedido: number };
+  infoCadastro?: { faturado?: string; dFat?: string };
+};
+
+async function listarTodosFaturados(): Promise<Map<number, string | null>> {
+  // Busca todos os pedidos faturados via ListarPedidos com apenas_faturado: "S"
+  // Faz paginação automática até buscar todos
+  const faturados = new Map<number, string | null>(); // codigo_pedido → data_faturamento
+  let pagina = 1;
+  const porPagina = 50;
+
+  while (true) {
+    const result = await omieCall<{
+      pedido_venda_produto: OmiePedidoListItem[];
+      paginacao: { total_registros: number; total_de_paginas: number };
+    }>("produtos/pedido", "ListarPedidos", {
+      pagina,
+      registros_por_pagina: porPagina,
+      apenas_faturado: "S",
+    });
+
+    for (const p of result.pedido_venda_produto ?? []) {
+      const codigo = p.cabecalho?.codigo_pedido;
+      const dFat = parseDateBR(p.infoCadastro?.dFat);
+      if (codigo) faturados.set(codigo, dFat);
+    }
+
+    if (pagina >= (result.paginacao?.total_de_paginas ?? 1)) break;
+    pagina++;
+    // Pausa entre páginas para respeitar rate-limit
+    await new Promise((r) => setTimeout(r, 300));
+  }
+
+  return faturados;
+}
+
 export const APIRoute = createAPIFileRoute("/api/sac/sync-faturamento")({
   POST: async () => {
-    // Busca todos os pedidos não faturados ainda no DB
-    const { data: nfs, error } = await sb
-      .from("sac_notas_fiscais")
-      .select("id, codigo_pedido_omie")
-      .not("codigo_pedido_omie", "is", null);
+    try {
+      // 1) Busca todos os pedidos faturados no Omie (1-2 chamadas vs 80)
+      const faturadosOmie = await listarTodosFaturados();
 
-    if (error || !nfs?.length) {
-      return Response.json({ ok: true, atualizados: 0 });
+      // 2) Busca todos os pedidos do nosso banco
+      const { data: nfs, error } = await sb
+        .from("sac_notas_fiscais")
+        .select("id, codigo_pedido_omie");
+
+      if (error || !nfs?.length) return Response.json({ ok: true, atualizados: 0 });
+
+      // 3) Atualiza cada registro com o status real do Omie
+      let atualizados = 0;
+      for (const nf of nfs) {
+        const codigo = Number(nf.codigo_pedido_omie);
+        if (!codigo) continue;
+        const faturado = faturadosOmie.has(codigo);
+        const dataFat = faturadosOmie.get(codigo) ?? null;
+
+        await sb.from("sac_notas_fiscais").update({
+          faturado,
+          data_faturamento: dataFat,
+          updated_at: new Date().toISOString(),
+        } as any).eq("id", nf.id);
+
+        atualizados++;
+      }
+
+      return Response.json({ ok: true, atualizados, totalFaturadosOmie: faturadosOmie.size });
+    } catch (err) {
+      console.error("[sync-faturamento]", err);
+      return Response.json({ error: (err as Error).message }, { status: 500 });
     }
-
-    let atualizados = 0;
-    const erros: string[] = [];
-
-    // Processa em lotes de 5 para não sobrecarregar a API do Omie
-    const lote = 5;
-    for (let i = 0; i < nfs.length; i += lote) {
-      const batch = nfs.slice(i, i + lote);
-      await Promise.all(batch.map(async (nf) => {
-        try {
-          const result = await omieCall<{ pedido_venda_produto: { infoCadastro?: { faturado?: string; dFat?: string } } }>(
-            "produtos/pedido",
-            "ConsultarPedido",
-            { codigo_pedido: Number(nf.codigo_pedido_omie) },
-          );
-          const info = result.pedido_venda_produto?.infoCadastro;
-          const faturado = info?.faturado === "S";
-          const dataFat = parseDateBR(info?.dFat);
-
-          await sb.from("sac_notas_fiscais").update({
-            faturado,
-            data_faturamento: dataFat,
-            updated_at: new Date().toISOString(),
-          } as any).eq("id", nf.id);
-
-          atualizados++;
-        } catch (err) {
-          erros.push(`${nf.codigo_pedido_omie}: ${(err as Error).message}`);
-        }
-      }));
-      // Pequena pausa entre lotes para respeitar rate-limit do Omie
-      if (i + lote < nfs.length) await new Promise((r) => setTimeout(r, 500));
-    }
-
-    return Response.json({ ok: true, atualizados, erros: erros.length ? erros : undefined });
   },
 });
