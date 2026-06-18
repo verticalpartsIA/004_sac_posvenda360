@@ -2497,22 +2497,60 @@ async function handleSyncFaturamento(req, res) {
   if (req.method === "OPTIONS") { res.statusCode=204; res.setHeader("Access-Control-Allow-Origin","*"); res.setHeader("Access-Control-Allow-Methods","POST,OPTIONS"); res.setHeader("Access-Control-Allow-Headers","Content-Type,Authorization"); return res.end(); }
   if (req.method !== "POST") return jsonR(405, { error: "Method Not Allowed" });
   function parseDateBR(s) { if (!s || s==="00/00/0000") return null; const [d,m,y]=s.split("/"); return `${y}-${m}-${d}`; }
+
+  // Consulta o Omie pelo pedido, tentando primeiro codigo_pedido (ID interno) e
+  // depois numero_pedido (número visível) como fallback.
+  async function consultarFat(codigoInterno, numeroPedido) {
+    async function tryCall(param) {
+      const r = await omieCall("produtos/pedido","ConsultarPedido", param);
+      const info = r?.pedido_venda_produto?.infoCadastro;
+      if (!info) throw new Error("infoCadastro vazio");
+      return { faturado: info.faturado === "S", dataFat: parseDateBR(info.dFat) };
+    }
+    if (codigoInterno) {
+      try { return await tryCall({ codigo_pedido: codigoInterno }); } catch(e) {
+        // fallback para numero_pedido se existir
+        if (numeroPedido) return await tryCall({ numero_pedido: Number(numeroPedido) });
+        throw e;
+      }
+    }
+    if (numeroPedido) return await tryCall({ numero_pedido: Number(numeroPedido) });
+    throw new Error("sem identificador de pedido");
+  }
+
   try {
-    const nfRows = await sbFetch(`/rest/v1/sac_notas_fiscais?select=id,codigo_pedido_omie&codigo_pedido_omie=not.is.null&limit=200`,{method:"GET"}).then(r=>r.json()).catch(()=>[]);
+    // Busca todas as NFs que tenham pelo menos um dos dois identificadores
+    const nfRows = await sbFetch(
+      `/rest/v1/sac_notas_fiscais?select=id,codigo_pedido_omie,numero_pedido_omie,nf_numero,data_emissao` +
+      `&or=(codigo_pedido_omie.not.is.null,numero_pedido_omie.not.is.null)&limit=300`,
+      {method:"GET"}
+    ).then(r=>r.json()).catch(()=>[]);
     if (!Array.isArray(nfRows)||!nfRows.length) return jsonR(200,{ok:true,atualizados:0});
+
     let atualizados=0; const erros=[]; const LOTE=10;
     for (let i=0;i<nfRows.length;i+=LOTE) {
       const batch=nfRows.slice(i,i+LOTE);
       await Promise.all(batch.map(async(nf)=>{
-        const codigo=Number(nf.codigo_pedido_omie); if(!codigo) return;
+        const codigoInterno = nf.codigo_pedido_omie ? Number(nf.codigo_pedido_omie) : null;
+        const numeroPedido  = nf.numero_pedido_omie || null;
         try {
-          const result=await omieCall("produtos/pedido","ConsultarPedido",{codigo_pedido:codigo});
-          const info=result?.pedido_venda_produto?.infoCadastro;
-          const faturado=info?.faturado==="S";
-          const dataFat=parseDateBR(info?.dFat);
-          await sbFetch(`/rest/v1/sac_notas_fiscais?id=eq.${encodeURIComponent(nf.id)}`,{method:"PATCH",body:JSON.stringify({faturado,data_faturamento:dataFat,updated_at:new Date().toISOString()})});
+          const { faturado, dataFat } = await consultarFat(codigoInterno, numeroPedido);
+          // Se Omie diz faturado=N mas a NF foi inserida via ListarNF (tem nf_numero real),
+          // confia na existência da NF: está faturada, só a data pode estar ausente.
+          const faturadoFinal = faturado || (!!nf.nf_numero && nf.nf_numero !== "?" && !/^\d{5,}$/.test(nf.nf_numero) === false);
+          await sbFetch(`/rest/v1/sac_notas_fiscais?id=eq.${encodeURIComponent(nf.id)}`,{method:"PATCH",body:JSON.stringify({faturado:faturadoFinal,data_faturamento:dataFat||undefined,updated_at:new Date().toISOString()})});
           atualizados++;
-        } catch(e) { erros.push(`pedido ${codigo}: ${e.message}`); }
+        } catch(e) {
+          // Se não achamos o pedido no Omie mas temos um nf_numero válido, marca faturado=true
+          // pois a NF existe — só não há pedido vinculado.
+          const temNF = !!nf.nf_numero && nf.nf_numero !== "?";
+          if (temNF) {
+            await sbFetch(`/rest/v1/sac_notas_fiscais?id=eq.${encodeURIComponent(nf.id)}`,{method:"PATCH",body:JSON.stringify({faturado:true,updated_at:new Date().toISOString()})}).catch(()=>{});
+            atualizados++;
+          } else {
+            erros.push(`pedido ${codigoInterno||numeroPedido}: ${e.message}`);
+          }
+        }
       }));
       if (i+LOTE<nfRows.length) await new Promise(r=>setTimeout(r,200));
     }
