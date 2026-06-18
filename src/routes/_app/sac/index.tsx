@@ -23,6 +23,8 @@ type SacNF = {
   transportadora: string | null;
   codigo_rastreio: string | null;
   pesquisa_enviada: boolean;
+  faturado: boolean | null;
+  data_faturamento: string | null;
 };
 
 const STATUS_CONFIG = {
@@ -55,18 +57,22 @@ export default function SacPipeline() {
   const [filtroAbc, setFiltroAbc] = useState<string>("TODOS");
   const [busca, setBusca] = useState("");
 
-  async function carregar() {
+  async function carregar(sincronizarFaturamento = false) {
     setLoading(true);
+    if (sincronizarFaturamento) {
+      // Sincroniza status de faturamento com Omie antes de recarregar
+      await fetch("/api/sac/sync-faturamento", { method: "POST" }).catch(() => null);
+    }
     const { data } = await supabase
       .from("sac_notas_fiscais")
-      .select("id,nf_numero,numero_pedido_omie,razao_social_cliente,classe_abc,valor_total,data_emissao,previsao_entrega,status_entrega,status_pos_venda,transportadora,codigo_rastreio,pesquisa_enviada")
+      .select("id,nf_numero,numero_pedido_omie,razao_social_cliente,classe_abc,valor_total,data_emissao,previsao_entrega,status_entrega,status_pos_venda,transportadora,codigo_rastreio,pesquisa_enviada,faturado,data_faturamento")
       .order("data_emissao", { ascending: false })
       .limit(200);
     setNfs((data as SacNF[]) ?? []);
     setLoading(false);
   }
 
-  useEffect(() => { void carregar(); }, []);
+  useEffect(() => { void carregar(true); }, []);
 
   const termoBusca = busca.trim().toLowerCase();
   const filtradas = nfs.filter((n) => {
@@ -96,7 +102,7 @@ export default function SacPipeline() {
           <h1 className="text-2xl font-semibold">SAC — Pipeline de NFs</h1>
           <p className="text-sm text-muted-foreground mt-0.5">Notas fiscais emitidas com acompanhamento pós-venda</p>
         </div>
-        <button onClick={carregar} className="flex items-center gap-2 rounded-lg border px-3 py-2 text-sm hover:bg-muted">
+        <button onClick={() => carregar(true)} className="flex items-center gap-2 rounded-lg border px-3 py-2 text-sm hover:bg-muted">
           <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} /> Atualizar
         </button>
       </div>
@@ -199,16 +205,20 @@ export default function SacPipeline() {
                     <td className="px-4 py-3 tabular-nums">{nf.data_emissao ? new Date(nf.data_emissao + "T12:00:00").toLocaleDateString("pt-BR") : "—"}</td>
                     <td className="px-4 py-3 tabular-nums">{nf.previsao_entrega ? new Date(nf.previsao_entrega + "T12:00:00").toLocaleDateString("pt-BR") : "—"}</td>
                     <td className="px-4 py-3 text-center">
-                      {nf.nf_numero
+                      {nf.faturado
                         ? (
-                          <span className="inline-flex flex-col items-center gap-0.5">
+                          <span className="inline-flex flex-col items-center gap-0.5" title={nf.data_faturamento ? `Faturado em ${new Date(nf.data_faturamento + "T12:00:00").toLocaleDateString("pt-BR")}` : "Faturado"}>
                             <FileCheck className="h-4 w-4 text-green-600" />
-                            <span className="text-[10px] text-green-700 font-mono tabular-nums">{nf.nf_numero}</span>
+                            {nf.data_faturamento && (
+                              <span className="text-[10px] text-green-700 tabular-nums">
+                                {new Date(nf.data_faturamento + "T12:00:00").toLocaleDateString("pt-BR")}
+                              </span>
+                            )}
                           </span>
                         ) : (
-                          <span className="inline-flex flex-col items-center gap-0.5">
+                          <span className="inline-flex flex-col items-center gap-0.5" title="Ainda não faturado no Omie">
                             <FileX className="h-4 w-4 text-muted-foreground" />
-                            <span className="text-[10px] text-muted-foreground">Pendente</span>
+                            <span className="text-[10px] text-muted-foreground">Não</span>
                           </span>
                         )}
                     </td>

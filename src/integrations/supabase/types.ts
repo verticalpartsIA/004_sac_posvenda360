@@ -730,6 +730,8 @@ export type Database = {
           tipo_entrega: string | null
           retirado_por: string | null
           obs_omie: string | null
+          faturado: boolean | null
+          data_faturamento: string | null
           created_at: string
           updated_at: string
         }
@@ -763,6 +765,8 @@ export type Database = {
           tipo_entrega?: string | null
           retirado_por?: string | null
           obs_omie?: string | null
+          faturado?: boolean | null
+          data_faturamento?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -796,6 +800,8 @@ export type Database = {
           tipo_entrega?: string | null
           retirado_por?: string | null
           obs_omie?: string | null
+          faturado?: boolean | null
+          data_faturamento?: string | null
           created_at?: string
           updated_at?: string
         }
