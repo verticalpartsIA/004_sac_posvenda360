@@ -539,26 +539,30 @@ Deno.serve(async (req: Request) => {
     return jsonResponse({ error: "not_found" }, 404);
   }
 
-  if (!(await isAuthorized(req, url))) {
-    return jsonResponse({ error: "unauthorized" }, 401);
-  }
-
-  let body: unknown;
   try {
-    body = await req.json();
-  } catch {
-    return jsonResponse(rpcError(null, -32700, "Parse error"), 400);
-  }
+    if (!(await isAuthorized(req, url))) {
+      return jsonResponse({ error: "unauthorized" }, 401);
+    }
 
-  if (Array.isArray(body)) {
-    const results = (await Promise.all(body.map((m) => handleMessage(m as Record<string, unknown>)))).filter(
-      (r) => r !== null,
-    );
-    if (results.length === 0) return new Response(null, { status: 202, headers: CORS_HEADERS });
-    return jsonResponse(results);
-  }
+    let body: unknown;
+    try {
+      body = await req.json();
+    } catch {
+      return jsonResponse(rpcError(null, -32700, "Parse error"), 400);
+    }
 
-  const result = await handleMessage(body as Record<string, unknown>);
-  if (result === null) return new Response(null, { status: 202, headers: CORS_HEADERS });
-  return jsonResponse(result);
+    if (Array.isArray(body)) {
+      const results = (await Promise.all(body.map((m) => handleMessage(m as Record<string, unknown>)))).filter(
+        (r) => r !== null,
+      );
+      if (results.length === 0) return new Response(null, { status: 202, headers: CORS_HEADERS });
+      return jsonResponse(results);
+    }
+
+    const result = await handleMessage(body as Record<string, unknown>);
+    if (result === null) return new Response(null, { status: 202, headers: CORS_HEADERS });
+    return jsonResponse(result);
+  } catch (err) {
+    return jsonResponse(rpcError(null, -32603, err instanceof Error ? err.message : String(err)), 500);
+  }
 });
