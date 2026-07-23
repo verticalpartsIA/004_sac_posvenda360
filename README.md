@@ -186,7 +186,7 @@ Cada cliente tem página de **histórico de ocorrências** (`/cliente/:cnpj`) co
 6 métricas executivas com metas configuráveis:
 
 | KPI | Meta | Cor |
-|---|---|---|
+|---|---|
 | **NPS Score** | ≥ 70 | Verde se atingida |
 | **SLA Compliance** | ≥ 95% | — |
 | **MTTR** (tempo médio de resolução) | < 48h | — |
@@ -476,3 +476,13 @@ resolve-360/
 Feito com ❤️ pela equipe VerticalParts · Suporte: [vpsistema.com](https://vpsistema.com)
 
 </div>
+
+---
+
+## Contributors
+
+- Gelson Simões — criador e responsável pelas soluções VerticalParts
+
+---
+
+**Feito por Gelson Simões**
