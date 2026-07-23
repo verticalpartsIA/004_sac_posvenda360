@@ -175,7 +175,8 @@ export default function SacPipeline() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b bg-muted/30 text-xs font-medium text-muted-foreground">
-                <th className="px-4 py-3 text-left">Nº Pedido</th>
+                <th className="px-4 py-3 text-left">NF</th>
+                <th className="px-4 py-3 text-left">Pedido</th>
                 <th className="px-4 py-3 text-left">Cliente</th>
                 <th className="px-4 py-3 text-center">Classe</th>
                 <th className="px-4 py-3 text-left">Emissão</th>
@@ -194,10 +195,10 @@ export default function SacPipeline() {
                 return (
                   <tr key={nf.id} className="border-b last:border-0 hover:bg-muted/20 transition-colors">
                     <td className="px-4 py-3">
-                      <span className="font-semibold tabular-nums">{nf.numero_pedido_omie ?? nf.nf_numero ?? "—"}</span>
-                      {nf.nf_numero && (
-                        <span className="block text-[10px] text-muted-foreground font-mono">NF {nf.nf_numero}</span>
-                      )}
+                      <span className="font-semibold tabular-nums">{nf.nf_numero ?? "—"}</span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className="tabular-nums">{nf.numero_pedido_omie ?? "—"}</span>
                     </td>
                     <td className="px-4 py-3 max-w-[200px] truncate">{nf.razao_social_cliente}</td>
                     <td className="px-4 py-3 text-center">
