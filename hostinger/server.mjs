@@ -3,6 +3,7 @@ import { createReadStream, existsSync, statSync, readFileSync } from "node:fs";
 import { join, extname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Readable } from "node:stream";
+import { execSync } from "node:child_process";
 
 // ─── Carrega um .env local (nodejs/.env), SEM sobrescrever o que o painel já injeta ──
 // O Passenger/hPanel injeta os segredos (ANTHROPIC_API_KEY etc.) no process.env. Este
@@ -1314,6 +1315,33 @@ const host = process.env.HOST || "0.0.0.0";
 
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 const clientDir = join(__dirname, "../dist/client");
+const repoDir = join(__dirname, "..");
+
+// ─── /version.json (aviso de atualização — ver src/lib/versionCheck.ts) ────
+// Deploy real é "git pull" + "npm run build" via SSH (ver
+// .github/workflows/deploy-hostinger.yml) — não há garantia de que um passo
+// de build gere version.json de forma confiável (lição de outro projeto
+// VerticalParts: um workflow redundante nunca rodava de verdade e o arquivo
+// nunca existia em produção). Em vez disso, lê o HEAD do git direto do
+// repositório (que o deploy mantém atualizado) a cada request, com cache
+// curto pra não rodar `git` a cada carregamento de página.
+const VERSION_CACHE_MS = 30 * 1000;
+let versionCache = null;
+let versionCacheAt = 0;
+function readVersionInfo() {
+  const now = Date.now();
+  if (versionCache && now - versionCacheAt < VERSION_CACHE_MS) return versionCache;
+  try {
+    const buildTime = execSync("git log -1 --format=%cI", { cwd: repoDir }).toString().trim();
+    const commit = execSync("git rev-parse HEAD", { cwd: repoDir }).toString().trim();
+    versionCache = { buildTime, commit };
+  } catch (e) {
+    if (!versionCache) versionCache = { buildTime: new Date().toISOString(), commit: "unknown" };
+    console.warn("[version] não foi possível ler o git — usando fallback:", e.message);
+  }
+  versionCacheAt = now;
+  return versionCache;
+}
 
 const MIME_TYPES = {
   ".js":   "application/javascript",
@@ -2825,6 +2853,13 @@ const server = http.createServer(async (req, res) => {
     }
     if (urlPath === "/api/admin/invite-user") {
       await handleAdminInviteUser(req, res);
+      return;
+    }
+    if (urlPath === "/version.json") {
+      res.statusCode = 200;
+      res.setHeader("Content-Type", "application/json");
+      res.setHeader("Cache-Control", "no-cache");
+      res.end(JSON.stringify(readVersionInfo()));
       return;
     }
 
