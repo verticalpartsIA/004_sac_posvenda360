@@ -2911,6 +2911,18 @@ const server = http.createServer(async (req, res) => {
     res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
     res.setHeader("Permissions-Policy", "geolocation=(), camera=(), microphone=()");
 
+    // As páginas SSR (TanStack Start) mudam a cada deploy — os nomes dos
+    // arquivos JS/CSS referenciados no HTML têm hash novo a cada build.
+    // Sem isso, o CDN da Hostinger (hcdn) guarda essa resposta em cache e
+    // continua servindo o HTML antigo (com hash antigo) por muito tempo
+    // depois de um deploy novo, mesmo com o servidor já atualizado — foi
+    // exatamente o que aconteceu com a tela de entrada: o servidor já
+    // tinha o código novo, mas quem acessava ainda recebia o HTML/JS de
+    // antes do deploy, cacheados no CDN. Os assets com hash (servidos mais
+    // acima, fora deste bloco) continuam com cache longo — só o documento
+    // HTML em si nunca deve ser cacheado.
+    res.setHeader("Cache-Control", "no-store");
+
     if (!response.body) {
       res.end();
       return;
