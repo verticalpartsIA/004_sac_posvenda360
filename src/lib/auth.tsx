@@ -1,6 +1,7 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import type { Session, User } from "@supabase/supabase-js";
+import { trackEnter, trackExit } from "@/lib/trackActivity";
 
 export type AppRole = "operador" | "qualidade" | "gestor" | "admin";
 
@@ -10,7 +11,11 @@ type AuthCtx = {
   roles: AppRole[];
   loading: boolean;
   signIn: (email: string, password: string) => Promise<{ error: string | null }>;
-  signUp: (email: string, password: string, displayName?: string) => Promise<{ error: string | null }>;
+  signUp: (
+    email: string,
+    password: string,
+    displayName?: string,
+  ) => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
   recoverPassword: (email: string) => Promise<{ error: string | null }>;
   updatePassword: (password: string) => Promise<{ error: string | null }>;
@@ -31,9 +36,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(s?.user ?? null);
       if (s?.user) {
         setTimeout(() => {
-          supabase.from("user_roles").select("role").eq("user_id", s.user.id).then(({ data }) => {
-            setRoles((data ?? []).map((r: { role: AppRole }) => r.role));
-          });
+          supabase
+            .from("user_roles")
+            .select("role")
+            .eq("user_id", s.user.id)
+            .then(({ data }) => {
+              setRoles((data ?? []).map((r: { role: AppRole }) => r.role));
+            });
         }, 0);
       } else {
         setRoles([]);
@@ -43,13 +52,52 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSession(data.session);
       setUser(data.session?.user ?? null);
       if (data.session?.user) {
-        supabase.from("user_roles").select("role").eq("user_id", data.session.user.id).then(({ data: r }) => {
-          setRoles((r ?? []).map((x: { role: AppRole }) => x.role));
-        });
+        supabase
+          .from("user_roles")
+          .select("role")
+          .eq("user_id", data.session.user.id)
+          .then(({ data: r }) => {
+            setRoles((r ?? []).map((x: { role: AppRole }) => x.role));
+          });
       }
       setLoading(false);
     });
     return () => sub.subscription.unsubscribe();
+  }, []);
+
+  // Rastro de acesso cross-sistema (timeline no portal vpsistema): dispara
+  // "enter" uma única vez assim que a sessão autenticada resolver, e "exit"
+  // ao sair da página. Ver src/lib/trackActivity.ts.
+  const trackedEnterRef = useRef(false);
+  const userRef = useRef<User | null>(null);
+  userRef.current = user;
+
+  useEffect(() => {
+    if (loading) return;
+    if (user && !trackedEnterRef.current) {
+      trackedEnterRef.current = true;
+      const email = user.email ?? "";
+      const name = (user.user_metadata?.display_name as string | undefined) ?? email;
+      trackEnter(email, name);
+    } else if (!user) {
+      // Permite rastrear um novo "enter" caso o usuário faça login de novo
+      // nesta mesma aba após um logout.
+      trackedEnterRef.current = false;
+    }
+  }, [user, loading]);
+
+  useEffect(() => {
+    function handlePageHide() {
+      const u = userRef.current;
+      if (!u) return;
+      const email = u.email ?? "";
+      const name = (u.user_metadata?.display_name as string | undefined) ?? email;
+      trackExit(email, name);
+    }
+    // pagehide é preferível a beforeunload por ser compatível com o bfcache
+    // (não desabilita o cache de navegação para trás/frente).
+    window.addEventListener("pagehide", handlePageHide);
+    return () => window.removeEventListener("pagehide", handlePageHide);
   }, []);
 
   const signIn: AuthCtx["signIn"] = async (email, password) => {
@@ -66,7 +114,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
   const signUp: AuthCtx["signUp"] = async (email, password, displayName) => {
     const { error } = await supabase.auth.signUp({
-      email, password,
+      email,
+      password,
       options: {
         emailRedirectTo: `${window.location.origin}/dashboard`,
         data: { display_name: displayName ?? email },
@@ -74,7 +123,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
     return { error: error?.message ?? null };
   };
-  const signOut = async () => { await supabase.auth.signOut(); };
+  const signOut = async () => {
+    await supabase.auth.signOut();
+  };
   const recoverPassword: AuthCtx["recoverPassword"] = async (email) => {
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
       redirectTo: `${window.location.origin}/reset-password`,
@@ -88,7 +139,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const hasRole = (r: AppRole) => roles.includes(r);
 
   return (
-    <Ctx.Provider value={{ session, user, roles, loading, signIn, signUp, signOut, recoverPassword, updatePassword, hasRole }}>
+    <Ctx.Provider
+      value={{
+        session,
+        user,
+        roles,
+        loading,
+        signIn,
+        signUp,
+        signOut,
+        recoverPassword,
+        updatePassword,
+        hasRole,
+      }}
+    >
       {children}
     </Ctx.Provider>
   );
