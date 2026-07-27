@@ -1825,6 +1825,54 @@ function classificarABC(valor) {
   return "C";
 }
 
+// ─── NF real a partir do pedido ───────────────────────────────────────────────
+// O ConsultarPedido NÃO retorna o número da NF (infoCadastro só traz faturado/
+// dFat etc. — verificado contra a API real), então gravar numero_pedido como
+// nf_numero produz o bug de NF == Pedido em todas as linhas do pipeline.
+// O caminho correto: nfconsultar/ListarNF numa janela de emissão em torno do
+// dFat e casar pelo compl.nIdPedido (o filtro nIdPedido não existe no
+// nfListarRequest — também verificado). ide.nNF traz o número real ("00020921"
+// → 20921) e compl.cChaveNFe a chave.
+function _addDiasBR(dataBR, dias) {
+  const [d, m, y] = dataBR.split("/").map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d + dias));
+  return `${String(dt.getUTCDate()).padStart(2, "0")}/${String(dt.getUTCMonth() + 1).padStart(2, "0")}/${dt.getUTCFullYear()}`;
+}
+async function buscarNFPorPedido(nIdPedido, dFatBR, cacheJanela) {
+  if (!nIdPedido) return null;
+  const hoje = new Date();
+  const hojeBR = `${String(hoje.getDate()).padStart(2, "0")}/${String(hoje.getMonth() + 1).padStart(2, "0")}/${hoje.getFullYear()}`;
+  const ini = dFatBR && dFatBR !== "00/00/0000" ? _addDiasBR(dFatBR, -2) : _addDiasBR(hojeBR, -90);
+  const fim = dFatBR && dFatBR !== "00/00/0000" ? _addDiasBR(dFatBR, 10) : hojeBR;
+  const chaveCache = `${ini}|${fim}`;
+  let registros = cacheJanela?.get(chaveCache);
+  if (!registros) {
+    registros = [];
+    let pagina = 1, totalPaginas = 1;
+    while (pagina <= totalPaginas && pagina <= 5) {
+      const data = await omieCall("produtos/nfconsultar", "ListarNF", {
+        pagina, registros_por_pagina: 100,
+        dEmiInicial: ini, dEmiFinal: fim,
+        tpNF: "1", filtrar_por_status: "N",
+      });
+      totalPaginas = data.total_de_paginas ?? 1;
+      registros.push(...(data.nfCadastro ?? []));
+      pagina++;
+    }
+    cacheJanela?.set(chaveCache, registros);
+  }
+  const nf = registros.find((n) => Number(n.compl?.nIdPedido) === Number(nIdPedido));
+  if (!nf) return null;
+  const bruto = String(nf.ide?.nNF || nf.compl?.nNumNF || "").trim();
+  const nfNumero = /^\d+$/.test(bruto) ? String(Number(bruto)) : bruto; // "00020921" → "20921"
+  if (!nfNumero) return null;
+  return {
+    nfNumero,
+    chaveNFe: nf.compl?.cChaveNFe || null,
+    dataEmissao: parseDateBR(nf.ide?.dEmi) || null,
+  };
+}
+
 function parseDateBR(d) {
   // DD/MM/YYYY → YYYY-MM-DD (retorna null se inválido)
   if (!d || typeof d !== "string" || !d.includes("/")) return null;
@@ -1994,12 +2042,20 @@ async function ingerirPedidoOmie(codigoPedido, { skipNotify = false } = {}) {
   const cliRows = await cliR.json().catch(() => []);
   const clienteId = Array.isArray(cliRows) && cliRows[0]?.id ? cliRows[0].id : null;
 
-  // 4. Upsert NF — número real da NF extraído de infoCadastro quando disponível
-  const nfNumero = String(
-    pedido.infoCadastro?.nNF || pedido.infoCadastro?.numero_nf ||
-    pedido.cabecalho.numero_pedido || codigoPedido
-  );
-  const chaveNFe = pedido.infoCadastro?.cChaveNFe || pedido.infoCadastro?.chave_nfe || null;
+  // 4. Upsert NF — o número REAL da NF vem do ListarNF (o ConsultarPedido não
+  // o expõe; ver buscarNFPorPedido). Sem NF localizada (pedido ainda não
+  // faturado/autorizado), fica o número do pedido como placeholder — a coluna
+  // é NOT NULL — e a UI o oculta enquanto nf_numero == numero_pedido_omie sem
+  // chave; o sync-faturamento corrige assim que a NF existir.
+  let nfReal = null;
+  if (pedido.infoCadastro?.faturado === "S") {
+    nfReal = await buscarNFPorPedido(codigoPedido, pedido.infoCadastro?.dFat).catch((e) => {
+      console.error(`[sac/omie] buscarNFPorPedido(${codigoPedido}):`, e.message);
+      return null;
+    });
+  }
+  const nfNumero = String(nfReal?.nfNumero || pedido.cabecalho.numero_pedido || codigoPedido);
+  const chaveNFe = nfReal?.chaveNFe || pedido.infoCadastro?.cChaveNFe || pedido.infoCadastro?.chave_nfe || null;
   const existing = await sbFetch(
     `/rest/v1/sac_notas_fiscais?codigo_pedido_omie=eq.${codigoPedido}&select=id&limit=1`,
     { method: "GET" },
@@ -2012,7 +2068,9 @@ async function ingerirPedidoOmie(codigoPedido, { skipNotify = false } = {}) {
     cnpj_cliente: cnpj,
     razao_social_cliente: cli.razao_social || "—",
     classe_abc: classeAbc,
-    data_emissao: parseDateBR(pedido.infoCadastro?.dFat) || new Date().toISOString().slice(0, 10),
+    data_emissao: nfReal?.dataEmissao || parseDateBR(pedido.infoCadastro?.dFat) || new Date().toISOString().slice(0, 10),
+    faturado: pedido.infoCadastro?.faturado === "S",
+    data_faturamento: parseDateBR(pedido.infoCadastro?.dFat) || null,
     valor_total: valorTotal,
     transportadora: pedido.frete?.nome_transportador || null,
     codigo_rastreio: pedido.frete?.codigo_rastreio || null,
@@ -2126,7 +2184,11 @@ async function ingerirNFOmie(nfData, { skipNotify = false } = {}) {
     transportadora, codigo_rastreio: null, previsao_entrega: null,
     status_entrega: "EMITIDA",
     codigo_pedido_omie: codigoPedido,
-    numero_pedido_omie: codigoPedido ? String(codigoPedido) : null,
+    // codigoPedido aqui é o nIdPedido INTERNO do Omie (ex.: 9210312680) — não o
+    // número visível do pedido (ex.: 29060). Gravá-lo em numero_pedido_omie
+    // poluía a coluna Pedido da UI; fica null e o sync-faturamento preenche o
+    // número real via ConsultarPedido.
+    numero_pedido_omie: null,
     dados_omie: nfData,
     updated_at: new Date().toISOString(),
   };
@@ -2134,8 +2196,13 @@ async function ingerirNFOmie(nfData, { skipNotify = false } = {}) {
   let nfId;
   if (Array.isArray(existing) && existing[0]?.id) {
     nfId = existing[0].id;
+    // No update, não sobrescrever com null identificadores de pedido que o
+    // sync-faturamento já possa ter preenchido com o número real.
+    const patchBody = { ...nfBody };
+    if (patchBody.numero_pedido_omie == null) delete patchBody.numero_pedido_omie;
+    if (patchBody.codigo_pedido_omie == null) delete patchBody.codigo_pedido_omie;
     await sbFetch(`/rest/v1/sac_notas_fiscais?id=eq.${nfId}`, {
-      method: "PATCH", body: JSON.stringify(nfBody),
+      method: "PATCH", body: JSON.stringify(patchBody),
     });
   } else {
     const nfR = await sbFetch("/rest/v1/sac_notas_fiscais", {
@@ -2543,13 +2610,21 @@ async function handleSyncFaturamento(req, res) {
   function parseDateBR(s) { if (!s || s==="00/00/0000") return null; const [d,m,y]=s.split("/"); return `${y}-${m}-${d}`; }
 
   // Consulta o Omie pelo pedido, tentando primeiro codigo_pedido (ID interno) e
-  // depois numero_pedido (número visível) como fallback.
+  // depois numero_pedido (número visível) como fallback. Retorna o pedido
+  // completo para o sync poder corrigir também numero_pedido_omie e a NF real.
   async function consultarFat(codigoInterno, numeroPedido) {
     async function tryCall(param) {
       const r = await omieCall("produtos/pedido","ConsultarPedido", param);
-      const info = r?.pedido_venda_produto?.infoCadastro;
+      const p = r?.pedido_venda_produto;
+      const info = p?.infoCadastro;
       if (!info) throw new Error("infoCadastro vazio");
-      return { faturado: info.faturado === "S", dataFat: parseDateBR(info.dFat) };
+      return {
+        faturado: info.faturado === "S",
+        dataFat: parseDateBR(info.dFat),
+        dFatBR: info.dFat || null,
+        numeroPedidoReal: p?.cabecalho?.numero_pedido ? String(p.cabecalho.numero_pedido) : null,
+        codigoPedidoReal: p?.cabecalho?.codigo_pedido ? Number(p.cabecalho.codigo_pedido) : null,
+      };
     }
     if (codigoInterno) {
       try { return await tryCall({ codigo_pedido: codigoInterno }); } catch(e) {
@@ -2563,32 +2638,54 @@ async function handleSyncFaturamento(req, res) {
   }
 
   try {
-    // Busca todas as NFs que tenham pelo menos um dos dois identificadores
+    // Busca todas as NFs que tenham pelo menos um dos dois identificadores.
+    // chave_nfe presente ⇒ nf_numero já é o número real (veio do ListarNF);
+    // chave_nfe ausente ⇒ nf_numero é o placeholder com o número do pedido.
     const nfRows = await sbFetch(
-      `/rest/v1/sac_notas_fiscais?select=id,codigo_pedido_omie,numero_pedido_omie,nf_numero,data_emissao` +
+      `/rest/v1/sac_notas_fiscais?select=id,codigo_pedido_omie,numero_pedido_omie,nf_numero,chave_nfe,data_emissao` +
       `&or=(codigo_pedido_omie.not.is.null,numero_pedido_omie.not.is.null)&limit=300`,
       {method:"GET"}
     ).then(r=>r.json()).catch(()=>[]);
     if (!Array.isArray(nfRows)||!nfRows.length) return jsonR(200,{ok:true,atualizados:0});
 
-    let atualizados=0; const erros=[]; const LOTE=10;
+    // Janelas de ListarNF compartilhadas entre pedidos com dFat próximo — evita
+    // repetir a mesma consulta para cada NF do mesmo dia.
+    const cacheJanela = new Map();
+    let atualizados=0; let nfCorrigidas=0; const erros=[]; const LOTE=10;
     for (let i=0;i<nfRows.length;i+=LOTE) {
       const batch=nfRows.slice(i,i+LOTE);
       await Promise.all(batch.map(async(nf)=>{
         const codigoInterno = nf.codigo_pedido_omie ? Number(nf.codigo_pedido_omie) : null;
-        const numeroPedido  = nf.numero_pedido_omie || null;
+        // numero_pedido_omie de registros antigos do ListarNF guardava o ID
+        // interno (10+ dígitos) — não serve como numero_pedido no fallback.
+        const numeroPedido  = nf.numero_pedido_omie && String(nf.numero_pedido_omie).length <= 8 ? nf.numero_pedido_omie : null;
         try {
-          const { faturado, dataFat } = await consultarFat(codigoInterno, numeroPedido);
-          // Se Omie diz faturado=N mas a NF foi inserida via ListarNF (tem nf_numero real),
-          // confia na existência da NF: está faturada, só a data pode estar ausente.
-          const faturadoFinal = faturado || (!!nf.nf_numero && nf.nf_numero !== "?" && !/^\d{5,}$/.test(nf.nf_numero) === false);
-          await sbFetch(`/rest/v1/sac_notas_fiscais?id=eq.${encodeURIComponent(nf.id)}`,{method:"PATCH",body:JSON.stringify({faturado:faturadoFinal,data_faturamento:dataFat||undefined,updated_at:new Date().toISOString()})});
+          const ped = await consultarFat(codigoInterno, numeroPedido);
+          const patch = {
+            faturado: ped.faturado || !!nf.chave_nfe,
+            data_faturamento: ped.dataFat || undefined,
+            updated_at: new Date().toISOString(),
+          };
+          // Corrige a coluna Pedido com o número visível real
+          if (ped.numeroPedidoReal) patch.numero_pedido_omie = ped.numeroPedidoReal;
+          if (ped.codigoPedidoReal && !nf.codigo_pedido_omie) patch.codigo_pedido_omie = ped.codigoPedidoReal;
+          // Corrige a coluna NF com o número real da nota (uma única vez —
+          // depois disso a linha tem chave_nfe e não volta a consultar)
+          if (ped.faturado && !nf.chave_nfe) {
+            const nfReal = await buscarNFPorPedido(ped.codigoPedidoReal || codigoInterno, ped.dFatBR, cacheJanela).catch(()=>null);
+            if (nfReal) {
+              patch.nf_numero    = nfReal.nfNumero;
+              patch.chave_nfe    = nfReal.chaveNFe;
+              if (nfReal.dataEmissao) patch.data_emissao = nfReal.dataEmissao;
+              nfCorrigidas++;
+            }
+          }
+          await sbFetch(`/rest/v1/sac_notas_fiscais?id=eq.${encodeURIComponent(nf.id)}`,{method:"PATCH",body:JSON.stringify(patch)});
           atualizados++;
         } catch(e) {
-          // Se não achamos o pedido no Omie mas temos um nf_numero válido, marca faturado=true
-          // pois a NF existe — só não há pedido vinculado.
-          const temNF = !!nf.nf_numero && nf.nf_numero !== "?";
-          if (temNF) {
+          // Se não achamos o pedido no Omie mas a NF tem chave (veio do ListarNF),
+          // ela existe de fato — marca faturado=true.
+          if (nf.chave_nfe) {
             await sbFetch(`/rest/v1/sac_notas_fiscais?id=eq.${encodeURIComponent(nf.id)}`,{method:"PATCH",body:JSON.stringify({faturado:true,updated_at:new Date().toISOString()})}).catch(()=>{});
             atualizados++;
           } else {
@@ -2598,7 +2695,7 @@ async function handleSyncFaturamento(req, res) {
       }));
       if (i+LOTE<nfRows.length) await new Promise(r=>setTimeout(r,200));
     }
-    return jsonR(200,{ok:true,atualizados,erros:erros.length?erros:undefined});
+    return jsonR(200,{ok:true,atualizados,nf_corrigidas:nfCorrigidas,erros:erros.length?erros:undefined});
   } catch(e) { console.error("[sync-faturamento]",e.message); return jsonR(500,{error:e.message}); }
 }
 

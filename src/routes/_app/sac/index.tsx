@@ -12,6 +12,7 @@ export const Route = createFileRoute("/_app/sac/")({
 type SacNF = {
   id: string;
   nf_numero: string;
+  chave_nfe: string | null;
   numero_pedido_omie: string | null;
   razao_social_cliente: string;
   classe_abc: "A" | "B" | "C";
@@ -65,7 +66,7 @@ export default function SacPipeline() {
     }
     const { data } = await supabase
       .from("sac_notas_fiscais")
-      .select("id,nf_numero,numero_pedido_omie,razao_social_cliente,classe_abc,valor_total,data_emissao,previsao_entrega,status_entrega,status_pos_venda,transportadora,codigo_rastreio,pesquisa_enviada,faturado,data_faturamento")
+      .select("id,nf_numero,chave_nfe,numero_pedido_omie,razao_social_cliente,classe_abc,valor_total,data_emissao,previsao_entrega,status_entrega,status_pos_venda,transportadora,codigo_rastreio,pesquisa_enviada,faturado,data_faturamento")
       .order("data_emissao", { ascending: false })
       .limit(200);
     setNfs((data as SacNF[]) ?? []);
@@ -195,7 +196,12 @@ export default function SacPipeline() {
                 return (
                   <tr key={nf.id} className="border-b last:border-0 hover:bg-muted/20 transition-colors">
                     <td className="px-4 py-3">
-                      <span className="font-semibold tabular-nums">{nf.nf_numero ?? "—"}</span>
+                      {/* Sem chave NFe e com nf_numero igual ao pedido = placeholder da
+                          ingestão (o número real chega via sync-faturamento) — não
+                          exibir o nº do pedido fingindo ser NF. */}
+                      {nf.chave_nfe || (nf.nf_numero && nf.nf_numero !== nf.numero_pedido_omie)
+                        ? <span className="font-semibold tabular-nums">{nf.nf_numero}</span>
+                        : <span className="text-muted-foreground" title="NF ainda não sincronizada do Omie">—</span>}
                     </td>
                     <td className="px-4 py-3">
                       <span className="tabular-nums">{nf.numero_pedido_omie ?? "—"}</span>
