@@ -179,7 +179,13 @@ export async function ingerirNFdoOmie(pedido: OmiePedido, cliente: OmieCliente) 
     .from("sac_notas_fiscais")
     .upsert(
       {
+        // ATENÇÃO: o ConsultarPedido não expõe o número da NF — isto é um
+        // placeholder com o número do pedido (coluna NOT NULL). O número real
+        // vem depois via sync-faturamento (ListarNF), que casa pelo
+        // codigo_pedido_omie. Com numero_pedido_omie preenchido igual, a UI
+        // sabe ocultar o placeholder até lá.
         nf_numero: pedido.cabecalho.numero_pedido,
+        numero_pedido_omie: String(pedido.cabecalho.numero_pedido),
         cliente_id: clienteId,
         cnpj_cliente: cnpj,
         razao_social_cliente: cliente.razao_social,
