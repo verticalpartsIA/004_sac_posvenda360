@@ -64,6 +64,22 @@ const STT_APIKEY      = () => process.env.STT_APIKEY || "b9cf3d5fbd2b1f3559b50e5
 const EVO_URL         = "http://72.61.48.156:8080";
 const CRON_KEY        = () => process.env.CRON_KEY || "vp360cron_b7f2a9d1e4"; // protege o endpoint do gatilho (cron do VPS)
 
+// ─── Config pública entregue ao cliente em runtime ────────────────────────────
+// Só valores que já são públicos por natureza (URL do projeto + chave anon, que
+// o Supabase publica no navegador de qualquer forma). Nada de service_role aqui.
+// Ver o bloco de injeção no handler SSR lá embaixo para o porquê.
+function publicEnvScript() {
+  const cfg = {
+    SUPABASE_URL:
+      process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || SB_URL,
+    SUPABASE_PUBLISHABLE_KEY:
+      process.env.VITE_SUPABASE_PUBLISHABLE_KEY || process.env.SUPABASE_PUBLISHABLE_KEY || "",
+  };
+  // `</script>` dentro do JSON encerraria a tag; escapar `<` evita isso.
+  const json = JSON.stringify(cfg).replace(/</g, "\\u003c");
+  return `<script>window.__PUBLIC_ENV__=${json}</script>`;
+}
+
 const OPEN_STATUSES = ["aberto","em_atendimento","aguardando_cliente","aguardando_interno"];
 
 function sbFetch(path, opts = {}) {
@@ -2925,6 +2941,23 @@ const server = http.createServer(async (req, res) => {
 
     if (!response.body) {
       res.end();
+      return;
+    }
+
+    // As chaves públicas do Supabase (URL + anon) são lidas pelo cliente via
+    // import.meta.env, que o Vite resolve em tempo de BUILD. O painel da
+    // Hostinger só injeta as variáveis no runtime do Node, então o bundle
+    // nascia com `process.env` vazio e o app quebrava com "Missing Supabase
+    // environment variable(s)". Aqui o servidor — que tem as variáveis em
+    // runtime — publica os valores no HTML, e o cliente lê deles como
+    // fallback. Assim o app não depende mais do ambiente de build.
+    const contentType = response.headers.get("content-type") || "";
+    if (contentType.includes("text/html") && !response.headers.get("content-encoding")) {
+      const html = await response.text();
+      const injected = html.replace(/<head(\s[^>]*)?>/i, (head) => head + publicEnvScript());
+      const buf = Buffer.from(injected, "utf8");
+      res.setHeader("Content-Length", String(buf.byteLength));
+      res.end(buf);
       return;
     }
 
