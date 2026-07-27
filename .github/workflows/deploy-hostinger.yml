@@ -23,6 +23,6 @@ jobs:
             git pull origin main
             set -a && . /home/u969661049/domains/posvenda360.vpsistema.com/public_html/.builds/config/.env && set +a
             npm ci
-            NODE_OPTIONS=--max-old-space-size=2048 npm run build
+            NODE_OPTIONS=--max-old-space-size=2048 RAYON_NUM_THREADS=2 UV_THREADPOOL_SIZE=2 npm run build
             touch tmp/restart.txt
             echo "Deploy concluído: $(git log --oneline -1)"
