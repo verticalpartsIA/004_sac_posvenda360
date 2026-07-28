@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { cn } from "@/lib/utils";
-import { ArrowLeft, Save, Truck, MessageCircle, Phone, CheckCircle2, Clock, Package, AlertTriangle, Send, Eye, EyeOff, ClipboardList, Camera, X, Plus } from "lucide-react";
+import { ArrowLeft, Save, Truck, MessageCircle, Phone, CheckCircle2, Clock, Package, AlertTriangle, Send, Eye, EyeOff, ClipboardList, Camera, X } from "lucide-react";
 
 export const Route = createFileRoute("/_app/sac/$nf")({
   component: SacNFDetalhe,
@@ -91,14 +91,6 @@ type OmieItem = {
     descricao?: string;
     quantidade?: number;
   };
-};
-
-type Chamado = {
-  id: string;
-  data_contato: string;
-  responsavel: string | null;
-  conteudo: string;
-  created_at: string;
 };
 
 type Pesquisa = {
@@ -203,17 +195,6 @@ export default function SacNFDetalhe() {
   const [savingSac, setSavingSac] = useState(false);
   const [msgSac, setMsgSac] = useState("");
 
-  // Histórico de chamadas SAC
-  const [chamados, setChamados] = useState<Chamado[]>([]);
-  const [mostrarNovoChamado, setMostrarNovoChamado] = useState(false);
-  const [novoChamado, setNovoChamado] = useState({
-    data_contato: new Date().toISOString().slice(0, 10),
-    responsavel: "",
-    conteudo: "",
-  });
-  const [savingChamado, setSavingChamado] = useState(false);
-  const [msgChamado, setMsgChamado] = useState("");
-
   // Formulário Pesquisa
   const [pesq, setPesq] = useState<Omit<Pesquisa, "id" | "respondida_em">>({
     produto_correto: null,
@@ -255,14 +236,12 @@ export default function SacNFDetalhe() {
 
   async function carregar() {
     setLoading(true);
-    const [{ data: nfData }, { data: pesquisaData }, { data: chamadosData }] = await Promise.all([
+    const [{ data: nfData }, { data: pesquisaData }] = await Promise.all([
       supabase.from("sac_notas_fiscais")
         .select("*, obs_omie, dados_omie, sac_clientes(nome_fantasia,whatsapp,email,telefone,contato)")
         .eq("id", nfId).single(),
       supabase.from("sac_pesquisas").select("*").eq("nf_id", nfId).maybeSingle(),
-      supabase.from("sac_chamados").select("*").eq("nf_id", nfId).order("data_contato", { ascending: false }).order("created_at", { ascending: false }),
     ]);
-    setChamados((chamadosData as Chamado[]) ?? []);
 
     if (nfData) {
       const n = nfData as NFDetalhe;
@@ -428,28 +407,6 @@ export default function SacNFDetalhe() {
     }
     setMsgSac(error ? "Erro ao salvar." : "Salvo com sucesso!");
     setSavingSac(false);
-  }
-
-  async function salvarChamado() {
-    if (!novoChamado.conteudo.trim()) { setMsgChamado("Descreva a conversa antes de salvar."); return; }
-    setSavingChamado(true);
-    setMsgChamado("");
-    const { error } = await supabase.from("sac_chamados").insert({
-      nf_id: nfId,
-      data_contato: novoChamado.data_contato,
-      responsavel: novoChamado.responsavel || null,
-      conteudo: novoChamado.conteudo.trim(),
-    });
-    if (error) {
-      setMsgChamado("Erro ao salvar.");
-      setSavingChamado(false);
-      return;
-    }
-    void writeAuditSac("chamado_registrado", { data_contato: novoChamado.data_contato });
-    setNovoChamado({ data_contato: new Date().toISOString().slice(0, 10), responsavel: "", conteudo: "" });
-    setMostrarNovoChamado(false);
-    setSavingChamado(false);
-    void carregar();
   }
 
   async function enviarObsOmie() {
@@ -1068,67 +1025,6 @@ export default function SacNFDetalhe() {
               <Save className="h-4 w-4" />{savingSac ? "Salvando..." : "Salvar SAC"}
             </button>
             {msgSac && <span className="text-sm text-muted-foreground">{msgSac}</span>}
-          </div>
-
-          {/* Histórico de chamadas — várias interações com o cliente ao longo do tempo */}
-          <div className="border-t pt-4 space-y-3">
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-semibold">Histórico de Chamadas</h3>
-              <button
-                onClick={() => setMostrarNovoChamado((v) => !v)}
-                className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium hover:bg-muted">
-                <Plus className="h-3.5 w-3.5" /> Nova chamada
-              </button>
-            </div>
-
-            {mostrarNovoChamado && (
-              <div className="rounded-lg border bg-muted/30 p-3 space-y-3">
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  <div>
-                    <label className="block text-xs font-medium text-muted-foreground mb-1">Data do contato</label>
-                    <input type="date" value={novoChamado.data_contato}
-                      onChange={(e) => setNovoChamado((p) => ({ ...p, data_contato: e.target.value }))}
-                      className="w-full rounded-lg border bg-background px-3 py-2 text-sm" />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-muted-foreground mb-1">Responsável</label>
-                    <input type="text" value={novoChamado.responsavel} placeholder="Quem fez o contato"
-                      onChange={(e) => setNovoChamado((p) => ({ ...p, responsavel: e.target.value }))}
-                      className="w-full rounded-lg border bg-background px-3 py-2 text-sm" />
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-muted-foreground mb-1">Registro da conversa</label>
-                  <textarea rows={3} value={novoChamado.conteudo}
-                    placeholder="O que foi conversado com o cliente nessa chamada?"
-                    onChange={(e) => setNovoChamado((p) => ({ ...p, conteudo: e.target.value }))}
-                    className="w-full rounded-lg border bg-background px-3 py-2 text-sm resize-none" />
-                </div>
-                <div className="flex items-center gap-3">
-                  <button onClick={salvarChamado} disabled={savingChamado}
-                    className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50">
-                    <Save className="h-4 w-4" />{savingChamado ? "Salvando..." : "Salvar chamada"}
-                  </button>
-                  {msgChamado && <span className="text-sm text-muted-foreground">{msgChamado}</span>}
-                </div>
-              </div>
-            )}
-
-            {chamados.length === 0 ? (
-              <p className="text-xs text-muted-foreground">Nenhuma chamada registrada ainda.</p>
-            ) : (
-              <div className="space-y-2">
-                {chamados.map((c) => (
-                  <div key={c.id} className="rounded-lg border bg-card p-3">
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
-                      <span className="font-medium text-foreground">{fmtDate(c.data_contato)}</span>
-                      {c.responsavel && <span>· {c.responsavel}</span>}
-                    </div>
-                    <p className="text-sm whitespace-pre-wrap">{c.conteudo}</p>
-                  </div>
-                ))}
-              </div>
-            )}
           </div>
         </div>
       </div>

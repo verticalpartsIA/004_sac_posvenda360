@@ -68,7 +68,7 @@ export default function SacPipeline() {
       .from("sac_notas_fiscais")
       .select("id,nf_numero,chave_nfe,numero_pedido_omie,razao_social_cliente,classe_abc,valor_total,data_emissao,previsao_entrega,status_entrega,status_pos_venda,transportadora,codigo_rastreio,pesquisa_enviada,faturado,data_faturamento")
       .order("data_emissao", { ascending: false })
-      .limit(5000);
+      .limit(200);
     setNfs((data as SacNF[]) ?? []);
     setLoading(false);
   }
