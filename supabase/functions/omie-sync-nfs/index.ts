@@ -51,7 +51,7 @@ async function omieCall(endpoint: string, call: string, param: Record<string, un
 }
 
 // deno-lint-ignore no-explicit-any
-async function ingerirNF(nfData: any) {
+async function ingerirNF(nfData: any, enrich: boolean) {
   const nfNumeroBruto = String(nfData.compl?.nNumNF || nfData.ide?.nNF || "?");
   const nfNumero = /^\d+$/.test(nfNumeroBruto) ? String(Number(nfNumeroBruto)) : nfNumeroBruto;
   const chaveNFe = nfData.compl?.cChaveNFe || null;
@@ -96,7 +96,10 @@ async function ingerirNF(nfData: any) {
 
   // Completa dados de expedição via ConsultarPedido só quando ainda faltam
   // (evita 1 chamada extra por NF em toda janela quando já está tudo preenchido).
-  if (codigoPedido && (!codigoRastreio || !numeroPedidoOmie)) {
+  // No backfill histórico (enrich=false) pula esse passo — 1 chamada por NF
+  // estoura o idle timeout de 150s da função em janelas maiores; o cron de
+  // 1 min completa esses campos para pedidos dos últimos 3 dias.
+  if (enrich && codigoPedido && (!codigoRastreio || !numeroPedidoOmie)) {
     try {
       const pedidoResp = await omieCall("produtos/pedido", "ConsultarPedido", { codigo_pedido: codigoPedido });
       const pedido = pedidoResp.pedido_venda_produto;
@@ -167,6 +170,7 @@ Deno.serve(async (req) => {
     const dataDeParam = url.searchParams.get("data_de");
     const dataAteParam = url.searchParams.get("data_ate");
     const maxPaginas = Number(url.searchParams.get("max_paginas") ?? "10");
+    const enrich = url.searchParams.get("enrich") !== "false";
 
     const hoje = hojeBR();
     const dataDe = dataDeParam || addDiasBR(hoje, -3);
@@ -192,7 +196,7 @@ Deno.serve(async (req) => {
         stats.total++;
         const nfNum = String(nf.compl?.nNumNF || nf.ide?.nNF || "?");
         try {
-          await ingerirNF(nf);
+          await ingerirNF(nf, enrich);
           stats.processed++;
         } catch (e) {
           stats.errors.push({ nf: nfNum, error: (e as Error).message });
