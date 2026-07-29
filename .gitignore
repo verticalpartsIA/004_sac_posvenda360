@@ -19,6 +19,10 @@ dist-ssr
 .env.*
 !.env.example
 
+# Settings locais do Claude Code — contem tokens/segredos de sessao.
+# Nao casa com "*.local" acima porque o arquivo termina em .json.
+.claude/settings.local.json
+
 # Wrangler / Cloudflare
 .wrangler/
 .dev.vars
