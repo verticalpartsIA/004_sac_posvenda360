@@ -66,6 +66,15 @@ export async function consultarPedido(codigoPedido: number): Promise<OmiePedido>
   return result.pedido_venda_produto;
 }
 
+export async function consultarPedidoPorNumero(numeroPedido: string): Promise<OmiePedido> {
+  const result = await omieCall<{ pedido_venda_produto: OmiePedido }>(
+    "produtos/pedido",
+    "ConsultarPedido",
+    { numero_pedido: numeroPedido }
+  );
+  return result.pedido_venda_produto;
+}
+
 export async function consultarCliente(codigoCliente: number): Promise<OmieCliente> {
   const result = await omieCall<{ clientes_cadastro: OmieCliente[] }>(
     "geral/clientes",

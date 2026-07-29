@@ -1,6 +1,6 @@
 import { createAPIFileRoute } from "@tanstack/react-start/api";
 import { createClient } from "@supabase/supabase-js";
-import { incluirAnexoOmie } from "@/lib/omie-client";
+import { incluirAnexoOmie, consultarPedidoPorNumero } from "@/lib/omie-client";
 
 const sb = createClient(
   process.env.SUPABASE_URL ?? "https://jkbklzlbhhfnamaeislb.supabase.co",
@@ -30,17 +30,32 @@ export const APIRoute = createAPIFileRoute("/api/sac/omie-anexo")({
 
     const { data: nf, error: nfErr } = await sb
       .from("sac_notas_fiscais")
-      .select("codigo_pedido_omie")
+      .select("codigo_pedido_omie, numero_pedido_omie")
       .eq("id", nf_id)
       .single();
 
     if (nfErr || !nf) return Response.json({ error: "NF não encontrada" }, { status: 404 });
-    if (!nf.codigo_pedido_omie) {
+    if (!nf.codigo_pedido_omie && !nf.numero_pedido_omie) {
       return Response.json({ error: "NF sem pedido Omie vinculado." }, { status: 422 });
     }
 
-    // nId do pedido de venda no Omie (tabela "PC" = Proposta Comercial)
-    const nId = Number(nf.codigo_pedido_omie);
+    // Busca o pedido no Omie pelo número (numero_pedido_omie, ex: 29597) para obter o
+    // codigo_pedido interno atualizado — o valor salvo em codigo_pedido_omie pode ficar
+    // desatualizado se o pedido for recriado/reemitido no Omie.
+    let nId = Number(nf.codigo_pedido_omie);
+    if (nf.numero_pedido_omie) {
+      try {
+        const pedido = await consultarPedidoPorNumero(nf.numero_pedido_omie);
+        nId = pedido.cabecalho.codigo_pedido;
+      } catch (err) {
+        if (!nId) {
+          return Response.json(
+            { error: `Pedido ${nf.numero_pedido_omie} não encontrado no Omie: ${(err as Error).message}` },
+            { status: 404 },
+          );
+        }
+      }
+    }
     const resultados: { nome: string; ok: boolean; erro?: string }[] = [];
 
     for (const foto of fotos) {
