@@ -76,6 +76,7 @@ type NFDetalhe = {
   responsavel_pos_venda: string | null;
   obs_omie: string | null;
   numero_pedido_omie: string | null;
+  codigo_pedido_omie: string | null;
   sac_clientes: {
     nome_fantasia: string | null;
     whatsapp: string | null;
@@ -755,14 +756,14 @@ export default function SacNFDetalhe() {
                         <div className="flex flex-col gap-1">
                           <button
                             onClick={() => void enviarFotoOmieItem(i)}
-                            disabled={enviandoFotoItem[i] || !nf.numero_pedido_omie}
+                            disabled={enviandoFotoItem[i] || !nf.codigo_pedido_omie}
                             className={cn(
                               "inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors disabled:opacity-50",
                               fotoItemPublicada[i]
                                 ? "bg-green-50 text-green-700 border border-green-200"
                                 : "bg-orange-600 text-white hover:bg-orange-700"
                             )}
-                            title={!nf.numero_pedido_omie ? "NF sem pedido Omie vinculado" : undefined}
+                            title={!nf.codigo_pedido_omie ? "NF sem pedido Omie vinculado" : undefined}
                           >
                             {fotoItemPublicada[i] ? <CheckCircle2 className="h-3.5 w-3.5" /> : <Send className="h-3.5 w-3.5" />}
                             {enviandoFotoItem[i]
