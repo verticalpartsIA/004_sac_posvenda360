@@ -18,11 +18,25 @@ jobs:
           port: 65002
           script: |
             set -e
-            cd /home/u969661049/domains/posvenda360.vpsistema.com/nodejs
+            SITE_DIR=/home/u969661049/domains/posvenda360.vpsistema.com
+            cd "$SITE_DIR/nodejs"
             export PATH=/opt/alt/alt-nodejs22/root/usr/bin:$PATH
             git pull origin main
-            set -a && . /home/u969661049/domains/posvenda360.vpsistema.com/public_html/.builds/config/.env && set +a
+            set -a && . "$SITE_DIR/public_html/.builds/config/.env" && set +a
             npm ci
             NODE_OPTIONS=--max-old-space-size=2048 RAYON_NUM_THREADS=2 UV_THREADPOOL_SIZE=2 npm run build
+
+            # A implantação nativa do Hostinger (Implantações > GitHub) regenera o
+            # .htaccess e reinsere um "SetEnv NODE_OPTIONS --require .../preload-timestamp.js".
+            # Esse --require aborta o processo Node antes de o app iniciar: o site passa a
+            # responder 503 sem produzir nenhum log de aplicação. Neutraliza a linha antes
+            # do restart, caso ela tenha voltado.
+            HTACCESS="$SITE_DIR/public_html/.htaccess"
+            if [ -f "$HTACCESS" ] && grep -qE '^[[:space:]]*SetEnv[[:space:]]+NODE_OPTIONS.*preload-timestamp\.js' "$HTACCESS"; then
+              cp -p "$HTACCESS" "$HTACCESS.bak"
+              sed -i -E 's|^([[:space:]]*SetEnv[[:space:]]+NODE_OPTIONS.*preload-timestamp\.js.*)$|# \1|' "$HTACCESS"
+              echo "[guard] linha NODE_OPTIONS/preload-timestamp comentada no .htaccess (backup em .htaccess.bak)"
+            fi
+
             touch tmp/restart.txt
             echo "Deploy concluído: $(git log --oneline -1)"
