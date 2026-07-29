@@ -222,6 +222,9 @@ export default function SacNFDetalhe() {
   const [msgObs, setMsgObs] = useState("");
   const [enviandoFotosOmie, setEnviandoFotosOmie] = useState(false);
   const [msgFotosOmie, setMsgFotosOmie] = useState("");
+  const [enviandoFotoItem, setEnviandoFotoItem] = useState<Record<number, boolean>>({});
+  const [msgFotoItem, setMsgFotoItem] = useState<Record<number, string>>({});
+  const [fotoItemPublicada, setFotoItemPublicada] = useState<Record<number, boolean>>({});
 
   // Conferência de itens (Poka-Yoke)
   const [conferencias, setConferencias] = useState<Record<number, number | null>>({});
@@ -313,12 +316,16 @@ export default function SacNFDetalhe() {
     if (!error) {
       const { data } = supabase.storage.from("sac-conferencia").getPublicUrl(path);
       setFotosConferencia((p) => ({ ...p, [idx]: data.publicUrl }));
+      setFotoItemPublicada((p) => ({ ...p, [idx]: false }));
+      setMsgFotoItem((p) => ({ ...p, [idx]: "" }));
     }
     setUploadingFoto((p) => ({ ...p, [idx]: false }));
   }
 
   function removerFotoConferencia(idx: number) {
     setFotosConferencia((p) => ({ ...p, [idx]: null }));
+    setFotoItemPublicada((p) => ({ ...p, [idx]: false }));
+    setMsgFotoItem((p) => ({ ...p, [idx]: "" }));
   }
 
   function calcularStatusEntrega(): NFDetalhe["status_entrega"] {
@@ -459,6 +466,36 @@ export default function SacNFDetalhe() {
       setMsgFotosOmie("Erro de conexão com o servidor.");
     }
     setEnviandoFotosOmie(false);
+  }
+
+  async function enviarFotoOmieItem(idx: number) {
+    const url = fotosConferencia[idx];
+    if (!url) return;
+    const item = itensOmie[idx];
+    const descricao = item?.produto?.descricao ?? `item-${idx}`;
+    const ext = url.split("?")[0].split(".").pop() ?? "jpg";
+    const nome = `conferencia-${descricao.slice(0, 30).replace(/[^a-zA-Z0-9]/g, "_")}-${idx}.${ext}`;
+
+    setEnviandoFotoItem((p) => ({ ...p, [idx]: true }));
+    setMsgFotoItem((p) => ({ ...p, [idx]: "" }));
+    try {
+      const res = await fetch("/api/sac/omie-anexo", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ nf_id: nfId, fotos: [{ url, nome }] }),
+      });
+      const data = await res.json() as { error?: string; resultados?: { nome: string; ok: boolean }[] };
+      if (res.ok && (data.resultados ?? []).some((r) => r.ok)) {
+        void writeAuditSac("foto_item_enviada_omie", { item_idx: idx, descricao });
+        setFotoItemPublicada((p) => ({ ...p, [idx]: true }));
+        setMsgFotoItem((p) => ({ ...p, [idx]: "Publicada no Omie!" }));
+      } else {
+        setMsgFotoItem((p) => ({ ...p, [idx]: data.error ?? "Erro ao publicar." }));
+      }
+    } catch {
+      setMsgFotoItem((p) => ({ ...p, [idx]: "Erro de conexão." }));
+    }
+    setEnviandoFotoItem((p) => ({ ...p, [idx]: false }));
   }
 
   async function reportarDivergencia() {
@@ -704,15 +741,40 @@ export default function SacNFDetalhe() {
                   {/* Foto do item conferido */}
                   <div className="pl-0">
                     {fotosConferencia[i] ? (
-                      <div className="relative inline-block">
-                        <a href={fotosConferencia[i]!} target="_blank" rel="noopener noreferrer">
-                          <img src={fotosConferencia[i]!} alt={`Foto item ${i + 1}`}
-                            className="h-20 w-28 rounded-lg border object-cover hover:opacity-90 transition-opacity" />
-                        </a>
-                        <button onClick={() => removerFotoConferencia(i)}
-                          className="absolute -top-1.5 -right-1.5 rounded-full bg-red-500 p-0.5 text-white hover:bg-red-600">
-                          <X className="h-3 w-3" />
-                        </button>
+                      <div className="flex items-center gap-3">
+                        <div className="relative inline-block">
+                          <a href={fotosConferencia[i]!} target="_blank" rel="noopener noreferrer">
+                            <img src={fotosConferencia[i]!} alt={`Foto item ${i + 1}`}
+                              className="h-20 w-28 rounded-lg border object-cover hover:opacity-90 transition-opacity" />
+                          </a>
+                          <button onClick={() => removerFotoConferencia(i)}
+                            className="absolute -top-1.5 -right-1.5 rounded-full bg-red-500 p-0.5 text-white hover:bg-red-600">
+                            <X className="h-3 w-3" />
+                          </button>
+                        </div>
+                        <div className="flex flex-col gap-1">
+                          <button
+                            onClick={() => void enviarFotoOmieItem(i)}
+                            disabled={enviandoFotoItem[i] || !nf.numero_pedido_omie}
+                            className={cn(
+                              "inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors disabled:opacity-50",
+                              fotoItemPublicada[i]
+                                ? "bg-green-50 text-green-700 border border-green-200"
+                                : "bg-orange-600 text-white hover:bg-orange-700"
+                            )}
+                            title={!nf.numero_pedido_omie ? "NF sem pedido Omie vinculado" : undefined}
+                          >
+                            {fotoItemPublicada[i] ? <CheckCircle2 className="h-3.5 w-3.5" /> : <Send className="h-3.5 w-3.5" />}
+                            {enviandoFotoItem[i]
+                              ? "Publicando..."
+                              : fotoItemPublicada[i]
+                              ? "Publicada no Omie"
+                              : "Publicar Imagem no Omie"}
+                          </button>
+                          {msgFotoItem[i] && !fotoItemPublicada[i] && (
+                            <span className="text-[11px] text-red-600">{msgFotoItem[i]}</span>
+                          )}
+                        </div>
                       </div>
                     ) : (
                       <label className={cn(
