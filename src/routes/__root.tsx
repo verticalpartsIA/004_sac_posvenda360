@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Outlet, Link, createRootRoute, HeadContent, Scripts } from "@tanstack/react-router";
 import appCss from "../styles.css?url";
 import { StoreProvider } from "@/lib/store";
-import { AuthProvider } from "@/lib/auth";
+import { AuthProvider, useAuth } from "@/lib/auth";
 import { Toaster } from "@/components/ui/sonner";
 import { startVersionCheck } from "@/lib/versionCheck";
 
@@ -107,21 +107,39 @@ function EntryScreen({ onVideoDone }: { onVideoDone: () => void }) {
 function RootComponent() {
   useEffect(() => startVersionCheck(), []);
 
-  const [showEntry, setShowEntry] = useState(true);
-  useEffect(() => {
-    const fallback = setTimeout(() => setShowEntry(false), 12000);
-    return () => clearTimeout(fallback);
-  }, []);
-
   return (
     <AuthProvider>
       <StoreProvider>
-        {showEntry && <EntryScreen onVideoDone={() => setShowEntry(false)} />}
-        <div style={showEntry ? { display: "none" } : undefined}>
-          <Outlet />
-        </div>
+        <AppShell />
         <Toaster richColors position="top-right" />
       </StoreProvider>
     </AuthProvider>
+  );
+}
+
+// Libera a tela de entrada assim que o vídeo da marca terminar E a sessão de
+// auth já tiver resolvido — não só por tempo/vídeo, como antes. Isso evita
+// prender login/dashboard já prontos atrás do splash (ver #23/#24). O
+// fallback de 4s cobre casos em que o vídeo falha em disparar onEnded/onError
+// (ex.: autoplay bloqueado) ou a sessão demora a resolver.
+function AppShell() {
+  const { loading: authLoading } = useAuth();
+  const [videoDone, setVideoDone] = useState(false);
+  const [fallbackDone, setFallbackDone] = useState(false);
+
+  useEffect(() => {
+    const fallback = setTimeout(() => setFallbackDone(true), 4000);
+    return () => clearTimeout(fallback);
+  }, []);
+
+  const showEntry = !fallbackDone && !(videoDone && !authLoading);
+
+  return (
+    <>
+      {showEntry && <EntryScreen onVideoDone={() => setVideoDone(true)} />}
+      <div style={showEntry ? { display: "none" } : undefined}>
+        <Outlet />
+      </div>
+    </>
   );
 }
