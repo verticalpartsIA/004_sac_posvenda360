@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useStore } from "@/lib/store";
 import { StatusBadge, PriorityBadge } from "@/components/app/StatusBadge";
 import { SlaBar } from "@/components/app/SlaBar";
@@ -12,7 +12,12 @@ import {
 } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
-export const Route = createFileRoute("/_app/ocorrencias")({ component: TicketsList });
+export const Route = createFileRoute("/_app/ocorrencias")({
+  component: TicketsList,
+  validateSearch: (search: Record<string, unknown>): { q?: string } => ({
+    q: typeof search.q === "string" ? search.q : undefined,
+  }),
+});
 
 const filters: ("todos" | TicketStatus)[] = ["todos", "aberto", "analise", "laudo", "concluido"];
 
@@ -29,8 +34,15 @@ const REASON_TONE: Record<OccurrenceReason, string> = {
 
 function TicketsList() {
   const { tickets } = useStore();
+  const { q: initialQ } = Route.useSearch();
   const [filter, setFilter] = useState<(typeof filters)[number]>("todos");
-  const [q, setQ] = useState("");
+  const [q, setQ] = useState(initialQ ?? "");
+
+  // Sincroniza com a busca global do header (AppLayout), que navega pra cá
+  // com `?q=` — sem isso, buscar de novo estando já nesta página não atualiza.
+  useEffect(() => {
+    if (initialQ !== undefined) setQ(initialQ);
+  }, [initialQ]);
 
   const filtered = tickets.filter((t) => {
     if (filter !== "todos" && t.status !== filter) return false;
