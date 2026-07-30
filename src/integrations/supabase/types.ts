@@ -14,6 +14,24 @@ export type Database = {
   }
   public: {
     Tables: {
+      app_internal_secrets: {
+        Row: {
+          created_at: string
+          key: string
+          value: string
+        }
+        Insert: {
+          created_at?: string
+          key: string
+          value: string
+        }
+        Update: {
+          created_at?: string
+          key?: string
+          value?: string
+        }
+        Relationships: []
+      }
       audit_log: {
         Row: {
           action: string
@@ -95,6 +113,146 @@ export type Database = {
         }
         Relationships: []
       }
+      expedicao_conferencias: {
+        Row: {
+          conferido_em: string | null
+          conferido_por: string | null
+          created_at: string | null
+          descricao: string | null
+          divergencia_tipo: string | null
+          id: string
+          item_idx: number
+          nf_id: string
+          obs_divergencia: string | null
+          qtd_conferida: number | null
+          qtd_pedida: number
+          sku: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          conferido_em?: string | null
+          conferido_por?: string | null
+          created_at?: string | null
+          descricao?: string | null
+          divergencia_tipo?: string | null
+          id?: string
+          item_idx: number
+          nf_id: string
+          obs_divergencia?: string | null
+          qtd_conferida?: number | null
+          qtd_pedida: number
+          sku?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          conferido_em?: string | null
+          conferido_por?: string | null
+          created_at?: string | null
+          descricao?: string | null
+          divergencia_tipo?: string | null
+          id?: string
+          item_idx?: number
+          nf_id?: string
+          obs_divergencia?: string | null
+          qtd_conferida?: number | null
+          qtd_pedida?: number
+          sku?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "expedicao_conferencias_nf_id_fkey"
+            columns: ["nf_id"]
+            isOneToOne: false
+            referencedRelation: "sac_notas_fiscais"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      handoffs: {
+        Row: {
+          assunto: string | null
+          cliente_jid: string | null
+          cliente_nome: string | null
+          cobrado_em: string | null
+          cobrancas: number | null
+          created_at: string | null
+          departamento: string | null
+          id: number
+          prazo_em: string | null
+          respondido_em: string | null
+          responsavel_tel: string | null
+          resposta: string | null
+          status: string | null
+          ticket_id: number | null
+        }
+        Insert: {
+          assunto?: string | null
+          cliente_jid?: string | null
+          cliente_nome?: string | null
+          cobrado_em?: string | null
+          cobrancas?: number | null
+          created_at?: string | null
+          departamento?: string | null
+          id?: never
+          prazo_em?: string | null
+          respondido_em?: string | null
+          responsavel_tel?: string | null
+          resposta?: string | null
+          status?: string | null
+          ticket_id?: number | null
+        }
+        Update: {
+          assunto?: string | null
+          cliente_jid?: string | null
+          cliente_nome?: string | null
+          cobrado_em?: string | null
+          cobrancas?: number | null
+          created_at?: string | null
+          departamento?: string | null
+          id?: never
+          prazo_em?: string | null
+          respondido_em?: string | null
+          responsavel_tel?: string | null
+          resposta?: string | null
+          status?: string | null
+          ticket_id?: number | null
+        }
+        Relationships: []
+      }
+      internal_contacts: {
+        Row: {
+          ativo: boolean
+          cargo: string | null
+          created_at: string
+          dept: string | null
+          nivel: string | null
+          nome: string
+          phone: string
+          updated_at: string
+        }
+        Insert: {
+          ativo?: boolean
+          cargo?: string | null
+          created_at?: string
+          dept?: string | null
+          nivel?: string | null
+          nome: string
+          phone: string
+          updated_at?: string
+        }
+        Update: {
+          ativo?: boolean
+          cargo?: string | null
+          created_at?: string
+          dept?: string | null
+          nivel?: string | null
+          nome?: string
+          phone?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       internal_tickets: {
         Row: {
           assigned_to: string | null
@@ -159,6 +317,63 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      lid_agenda: {
+        Row: {
+          created_at: string | null
+          empresa: string | null
+          id: string
+          lid_jid: string
+          nome: string | null
+          phone: string
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          empresa?: string | null
+          id?: string
+          lid_jid: string
+          nome?: string | null
+          phone: string
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          empresa?: string | null
+          id?: string
+          lid_jid?: string
+          nome?: string | null
+          phone?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      mcp_api_keys: {
+        Row: {
+          active: boolean
+          created_at: string
+          id: string
+          label: string
+          last_used_at: string | null
+          token_hash: string
+        }
+        Insert: {
+          active?: boolean
+          created_at?: string
+          id?: string
+          label: string
+          last_used_at?: string | null
+          token_hash: string
+        }
+        Update: {
+          active?: boolean
+          created_at?: string
+          id?: string
+          label?: string
+          last_used_at?: string | null
+          token_hash?: string
+        }
+        Relationships: []
       }
       notifications: {
         Row: {
@@ -325,6 +540,353 @@ export type Database = {
         }
         Relationships: []
       }
+      sac_chamados: {
+        Row: {
+          conteudo: string
+          created_at: string
+          data_contato: string
+          id: string
+          nf_id: string
+          responsavel: string | null
+        }
+        Insert: {
+          conteudo: string
+          created_at?: string
+          data_contato: string
+          id?: string
+          nf_id: string
+          responsavel?: string | null
+        }
+        Update: {
+          conteudo?: string
+          created_at?: string
+          data_contato?: string
+          id?: string
+          nf_id?: string
+          responsavel?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sac_chamados_nf_id_fkey"
+            columns: ["nf_id"]
+            isOneToOne: false
+            referencedRelation: "sac_notas_fiscais"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      sac_clientes: {
+        Row: {
+          classe_abc: string
+          cnpj: string
+          codigo_omie: number | null
+          contato: string | null
+          created_at: string | null
+          email: string | null
+          gerente_conta: string | null
+          id: string
+          nome_fantasia: string | null
+          razao_social: string
+          telefone: string | null
+          updated_at: string | null
+          whatsapp: string | null
+        }
+        Insert: {
+          classe_abc?: string
+          cnpj: string
+          codigo_omie?: number | null
+          contato?: string | null
+          created_at?: string | null
+          email?: string | null
+          gerente_conta?: string | null
+          id?: string
+          nome_fantasia?: string | null
+          razao_social: string
+          telefone?: string | null
+          updated_at?: string | null
+          whatsapp?: string | null
+        }
+        Update: {
+          classe_abc?: string
+          cnpj?: string
+          codigo_omie?: number | null
+          contato?: string | null
+          created_at?: string | null
+          email?: string | null
+          gerente_conta?: string | null
+          id?: string
+          nome_fantasia?: string | null
+          razao_social?: string
+          telefone?: string | null
+          updated_at?: string | null
+          whatsapp?: string | null
+        }
+        Relationships: []
+      }
+      sac_logs_comunicacao: {
+        Row: {
+          canal: string
+          conteudo_mensagem: string | null
+          created_at: string | null
+          data_envio: string | null
+          destinatario: string | null
+          id: string
+          nf_id: string | null
+          resposta_api: Json | null
+          status_envio: string
+          tipo_mensagem: string
+        }
+        Insert: {
+          canal: string
+          conteudo_mensagem?: string | null
+          created_at?: string | null
+          data_envio?: string | null
+          destinatario?: string | null
+          id?: string
+          nf_id?: string | null
+          resposta_api?: Json | null
+          status_envio?: string
+          tipo_mensagem: string
+        }
+        Update: {
+          canal?: string
+          conteudo_mensagem?: string | null
+          created_at?: string | null
+          data_envio?: string | null
+          destinatario?: string | null
+          id?: string
+          nf_id?: string | null
+          resposta_api?: Json | null
+          status_envio?: string
+          tipo_mensagem?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sac_logs_comunicacao_nf_id_fkey"
+            columns: ["nf_id"]
+            isOneToOne: false
+            referencedRelation: "sac_notas_fiscais"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      sac_nf_backup_20260727: {
+        Row: {
+          chave_nfe: string | null
+          codigo_pedido_omie: number | null
+          data_emissao: string | null
+          data_faturamento: string | null
+          faturado: boolean | null
+          id: string | null
+          nf_numero: string | null
+          numero_pedido_omie: string | null
+        }
+        Insert: {
+          chave_nfe?: string | null
+          codigo_pedido_omie?: number | null
+          data_emissao?: string | null
+          data_faturamento?: string | null
+          faturado?: boolean | null
+          id?: string | null
+          nf_numero?: string | null
+          numero_pedido_omie?: string | null
+        }
+        Update: {
+          chave_nfe?: string | null
+          codigo_pedido_omie?: number | null
+          data_emissao?: string | null
+          data_faturamento?: string | null
+          faturado?: boolean | null
+          id?: string | null
+          nf_numero?: string | null
+          numero_pedido_omie?: string | null
+        }
+        Relationships: []
+      }
+      sac_notas_fiscais: {
+        Row: {
+          chave_nfe: string | null
+          classe_abc: string
+          cliente_id: string | null
+          cnpj_cliente: string | null
+          codigo_pedido_omie: number | null
+          codigo_rastreio: string | null
+          comprovante_entrega: string | null
+          created_at: string | null
+          dados_omie: Json | null
+          data_coleta: string | null
+          data_emissao: string | null
+          data_entrega_real: string | null
+          data_faturamento: string | null
+          data_pos_venda: string | null
+          faturado: boolean | null
+          id: string
+          nf_numero: string
+          numero_pedido_omie: string | null
+          obs_omie: string | null
+          pesquisa_enviada: boolean | null
+          pesquisa_enviada_em: string | null
+          previsao_entrega: string | null
+          previsao_pos_venda: string | null
+          razao_social_cliente: string | null
+          responsavel_pos_venda: string | null
+          retirado_por: string | null
+          status_entrega: string
+          status_pos_venda: string | null
+          tipo_entrega: string | null
+          transportadora: string | null
+          transportadora_entregou: boolean | null
+          updated_at: string | null
+          valor_total: number | null
+        }
+        Insert: {
+          chave_nfe?: string | null
+          classe_abc?: string
+          cliente_id?: string | null
+          cnpj_cliente?: string | null
+          codigo_pedido_omie?: number | null
+          codigo_rastreio?: string | null
+          comprovante_entrega?: string | null
+          created_at?: string | null
+          dados_omie?: Json | null
+          data_coleta?: string | null
+          data_emissao?: string | null
+          data_entrega_real?: string | null
+          data_faturamento?: string | null
+          data_pos_venda?: string | null
+          faturado?: boolean | null
+          id?: string
+          nf_numero: string
+          numero_pedido_omie?: string | null
+          obs_omie?: string | null
+          pesquisa_enviada?: boolean | null
+          pesquisa_enviada_em?: string | null
+          previsao_entrega?: string | null
+          previsao_pos_venda?: string | null
+          razao_social_cliente?: string | null
+          responsavel_pos_venda?: string | null
+          retirado_por?: string | null
+          status_entrega?: string
+          status_pos_venda?: string | null
+          tipo_entrega?: string | null
+          transportadora?: string | null
+          transportadora_entregou?: boolean | null
+          updated_at?: string | null
+          valor_total?: number | null
+        }
+        Update: {
+          chave_nfe?: string | null
+          classe_abc?: string
+          cliente_id?: string | null
+          cnpj_cliente?: string | null
+          codigo_pedido_omie?: number | null
+          codigo_rastreio?: string | null
+          comprovante_entrega?: string | null
+          created_at?: string | null
+          dados_omie?: Json | null
+          data_coleta?: string | null
+          data_emissao?: string | null
+          data_entrega_real?: string | null
+          data_faturamento?: string | null
+          data_pos_venda?: string | null
+          faturado?: boolean | null
+          id?: string
+          nf_numero?: string
+          numero_pedido_omie?: string | null
+          obs_omie?: string | null
+          pesquisa_enviada?: boolean | null
+          pesquisa_enviada_em?: string | null
+          previsao_entrega?: string | null
+          previsao_pos_venda?: string | null
+          razao_social_cliente?: string | null
+          responsavel_pos_venda?: string | null
+          retirado_por?: string | null
+          status_entrega?: string
+          status_pos_venda?: string | null
+          tipo_entrega?: string | null
+          transportadora?: string | null
+          transportadora_entregou?: boolean | null
+          updated_at?: string | null
+          valor_total?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sac_notas_fiscais_cliente_id_fkey"
+            columns: ["cliente_id"]
+            isOneToOne: false
+            referencedRelation: "sac_clientes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      sac_pesquisas: {
+        Row: {
+          atendeu_prazo: boolean | null
+          avaliacao_atendimento: number | null
+          compraria_novamente: boolean | null
+          created_at: string | null
+          dificuldade_compra: boolean | null
+          id: string
+          nf_id: string | null
+          nps_score: number | null
+          observacoes: string | null
+          pontos_melhoria: string | null
+          pontos_positivos: string | null
+          produto_atendeu_expectativas: boolean | null
+          produto_correto: boolean | null
+          recebeu_nota_boleto: boolean | null
+          respondida_em: string | null
+          sugestoes: string | null
+          token: string | null
+        }
+        Insert: {
+          atendeu_prazo?: boolean | null
+          avaliacao_atendimento?: number | null
+          compraria_novamente?: boolean | null
+          created_at?: string | null
+          dificuldade_compra?: boolean | null
+          id?: string
+          nf_id?: string | null
+          nps_score?: number | null
+          observacoes?: string | null
+          pontos_melhoria?: string | null
+          pontos_positivos?: string | null
+          produto_atendeu_expectativas?: boolean | null
+          produto_correto?: boolean | null
+          recebeu_nota_boleto?: boolean | null
+          respondida_em?: string | null
+          sugestoes?: string | null
+          token?: string | null
+        }
+        Update: {
+          atendeu_prazo?: boolean | null
+          avaliacao_atendimento?: number | null
+          compraria_novamente?: boolean | null
+          created_at?: string | null
+          dificuldade_compra?: boolean | null
+          id?: string
+          nf_id?: string | null
+          nps_score?: number | null
+          observacoes?: string | null
+          pontos_melhoria?: string | null
+          pontos_positivos?: string | null
+          produto_atendeu_expectativas?: boolean | null
+          produto_correto?: boolean | null
+          recebeu_nota_boleto?: boolean | null
+          respondida_em?: string | null
+          sugestoes?: string | null
+          token?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sac_pesquisas_nf_id_fkey"
+            columns: ["nf_id"]
+            isOneToOne: false
+            referencedRelation: "sac_notas_fiscais"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       sla_config: {
         Row: {
           hours: number
@@ -437,6 +999,7 @@ export type Database = {
           part: string
           part_code: string
           priority: Database["public"]["Enums"]["ticket_priority"]
+          product_family: string | null
           produto_id: string | null
           quantity: number | null
           reason: string
@@ -449,6 +1012,7 @@ export type Database = {
             | null
           ro_number: string | null
           root_cause: Database["public"]["Enums"]["root_cause"] | null
+          sac_nf_id: string | null
           sla_hours: number
           state: string | null
           status: Database["public"]["Enums"]["ticket_status"]
@@ -487,6 +1051,7 @@ export type Database = {
           part: string
           part_code: string
           priority?: Database["public"]["Enums"]["ticket_priority"]
+          product_family?: string | null
           produto_id?: string | null
           quantity?: number | null
           reason: string
@@ -499,6 +1064,7 @@ export type Database = {
             | null
           ro_number?: string | null
           root_cause?: Database["public"]["Enums"]["root_cause"] | null
+          sac_nf_id?: string | null
           sla_hours?: number
           state?: string | null
           status?: Database["public"]["Enums"]["ticket_status"]
@@ -537,6 +1103,7 @@ export type Database = {
           part?: string
           part_code?: string
           priority?: Database["public"]["Enums"]["ticket_priority"]
+          product_family?: string | null
           produto_id?: string | null
           quantity?: number | null
           reason?: string
@@ -549,6 +1116,7 @@ export type Database = {
             | null
           ro_number?: string | null
           root_cause?: Database["public"]["Enums"]["root_cause"] | null
+          sac_nf_id?: string | null
           sla_hours?: number
           state?: string | null
           status?: Database["public"]["Enums"]["ticket_status"]
@@ -570,6 +1138,13 @@ export type Database = {
             columns: ["produto_id"]
             isOneToOne: false
             referencedRelation: "produtos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tickets_sac_nf_id_fkey"
+            columns: ["sac_nf_id"]
+            isOneToOne: false
+            referencedRelation: "sac_notas_fiscais"
             referencedColumns: ["id"]
           },
         ]
@@ -597,49 +1172,49 @@ export type Database = {
       }
       whatsapp_messages: {
         Row: {
+          body: string
+          created_at: string
+          from_me: boolean
           id: string
           instance: string
-          remote_jid: string
-          phone: string          // gerado: remote_jid sem sufixo @s.whatsapp.net/@lid/@c.us
-          push_name: string | null
-          from_me: boolean
-          message_id: string | null
-          body: string
           media_type: string | null
           media_url: string | null
-          ticket_id: string | null
+          message_id: string | null
+          phone: string | null
+          push_name: string | null
           raw: Json | null
-          created_at: string
+          remote_jid: string
+          ticket_id: string | null
         }
         Insert: {
+          body: string
+          created_at?: string
+          from_me?: boolean
           id?: string
           instance?: string
-          remote_jid: string
-          // phone é GENERATED — não enviar no insert
-          push_name?: string | null
-          from_me?: boolean
-          message_id?: string | null
-          body: string
           media_type?: string | null
           media_url?: string | null
-          ticket_id?: string | null
+          message_id?: string | null
+          phone?: string | null
+          push_name?: string | null
           raw?: Json | null
-          created_at?: string
+          remote_jid: string
+          ticket_id?: string | null
         }
         Update: {
+          body?: string
+          created_at?: string
+          from_me?: boolean
           id?: string
           instance?: string
-          remote_jid?: string
-          // phone é GENERATED — não enviar no update
-          push_name?: string | null
-          from_me?: boolean
-          message_id?: string | null
-          body?: string
           media_type?: string | null
           media_url?: string | null
-          ticket_id?: string | null
+          message_id?: string | null
+          phone?: string | null
+          push_name?: string | null
           raw?: Json | null
-          created_at?: string
+          remote_jid?: string
+          ticket_id?: string | null
         }
         Relationships: [
           {
@@ -651,296 +1226,12 @@ export type Database = {
           },
         ]
       }
-      sac_clientes: {
-        Row: {
-          id: string
-          cnpj: string
-          razao_social: string
-          nome_fantasia: string | null
-          classe_abc: string
-          email: string | null
-          telefone: string | null
-          whatsapp: string | null
-          contato: string | null
-          gerente_conta: string | null
-          codigo_omie: number | null
-          created_at: string
-          updated_at: string
-        }
-        Insert: {
-          id?: string
-          cnpj: string
-          razao_social: string
-          nome_fantasia?: string | null
-          classe_abc?: string
-          email?: string | null
-          telefone?: string | null
-          whatsapp?: string | null
-          contato?: string | null
-          gerente_conta?: string | null
-          codigo_omie?: number | null
-          created_at?: string
-          updated_at?: string
-        }
-        Update: {
-          id?: string
-          cnpj?: string
-          razao_social?: string
-          nome_fantasia?: string | null
-          classe_abc?: string
-          email?: string | null
-          telefone?: string | null
-          whatsapp?: string | null
-          contato?: string | null
-          gerente_conta?: string | null
-          codigo_omie?: number | null
-          created_at?: string
-          updated_at?: string
-        }
-        Relationships: []
-      }
-      sac_notas_fiscais: {
-        Row: {
-          id: string
-          nf_numero: string
-          cliente_id: string | null
-          cnpj_cliente: string | null
-          razao_social_cliente: string
-          classe_abc: string
-          data_emissao: string | null
-          valor_total: number | null
-          transportadora: string | null
-          codigo_rastreio: string | null
-          previsao_entrega: string | null
-          status_entrega: string
-          data_entrega_real: string | null
-          codigo_pedido_omie: number | null
-          numero_pedido_omie: string | null
-          dados_omie: Json | null
-          pesquisa_enviada: boolean | null
-          pesquisa_enviada_em: string | null
-          chave_nfe: string | null
-          data_coleta: string | null
-          transportadora_entregou: boolean | null
-          comprovante_entrega: string | null
-          previsao_pos_venda: string | null
-          status_pos_venda: string | null
-          data_pos_venda: string | null
-          responsavel_pos_venda: string | null
-          tipo_entrega: string | null
-          retirado_por: string | null
-          obs_omie: string | null
-          faturado: boolean | null
-          data_faturamento: string | null
-          created_at: string
-          updated_at: string
-        }
-        Insert: {
-          id?: string
-          nf_numero: string
-          cliente_id?: string | null
-          cnpj_cliente?: string | null
-          razao_social_cliente: string
-          classe_abc?: string
-          data_emissao?: string | null
-          valor_total?: number | null
-          transportadora?: string | null
-          codigo_rastreio?: string | null
-          previsao_entrega?: string | null
-          status_entrega?: string
-          data_entrega_real?: string | null
-          codigo_pedido_omie?: number | null
-          numero_pedido_omie?: string | null
-          dados_omie?: Json | null
-          pesquisa_enviada?: boolean | null
-          pesquisa_enviada_em?: string | null
-          chave_nfe?: string | null
-          data_coleta?: string | null
-          transportadora_entregou?: boolean | null
-          comprovante_entrega?: string | null
-          previsao_pos_venda?: string | null
-          status_pos_venda?: string | null
-          data_pos_venda?: string | null
-          responsavel_pos_venda?: string | null
-          tipo_entrega?: string | null
-          retirado_por?: string | null
-          obs_omie?: string | null
-          faturado?: boolean | null
-          data_faturamento?: string | null
-          created_at?: string
-          updated_at?: string
-        }
-        Update: {
-          id?: string
-          nf_numero?: string
-          cliente_id?: string | null
-          cnpj_cliente?: string | null
-          razao_social_cliente?: string
-          classe_abc?: string
-          data_emissao?: string | null
-          valor_total?: number | null
-          transportadora?: string | null
-          codigo_rastreio?: string | null
-          previsao_entrega?: string | null
-          status_entrega?: string
-          data_entrega_real?: string | null
-          codigo_pedido_omie?: number | null
-          numero_pedido_omie?: string | null
-          dados_omie?: Json | null
-          pesquisa_enviada?: boolean | null
-          pesquisa_enviada_em?: string | null
-          chave_nfe?: string | null
-          data_coleta?: string | null
-          transportadora_entregou?: boolean | null
-          comprovante_entrega?: string | null
-          previsao_pos_venda?: string | null
-          status_pos_venda?: string | null
-          data_pos_venda?: string | null
-          responsavel_pos_venda?: string | null
-          tipo_entrega?: string | null
-          retirado_por?: string | null
-          obs_omie?: string | null
-          faturado?: boolean | null
-          data_faturamento?: string | null
-          created_at?: string
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "sac_notas_fiscais_cliente_id_fkey"
-            columns: ["cliente_id"]
-            isOneToOne: false
-            referencedRelation: "sac_clientes"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      sac_pesquisas: {
-        Row: {
-          id: string
-          nf_id: string | null
-          token: string | null
-          produto_correto: boolean | null
-          atendeu_prazo: boolean | null
-          recebeu_nota_boleto: boolean | null
-          produto_atendeu_expectativas: boolean | null
-          avaliacao_atendimento: number | null
-          nps_score: number | null
-          dificuldade_compra: boolean | null
-          pontos_positivos: string | null
-          pontos_melhoria: string | null
-          compraria_novamente: boolean | null
-          sugestoes: string | null
-          observacoes: string | null
-          respondida_em: string | null
-          created_at: string
-        }
-        Insert: {
-          id?: string
-          nf_id?: string | null
-          token?: string | null
-          produto_correto?: boolean | null
-          atendeu_prazo?: boolean | null
-          recebeu_nota_boleto?: boolean | null
-          produto_atendeu_expectativas?: boolean | null
-          avaliacao_atendimento?: number | null
-          nps_score?: number | null
-          dificuldade_compra?: boolean | null
-          pontos_positivos?: string | null
-          pontos_melhoria?: string | null
-          compraria_novamente?: boolean | null
-          sugestoes?: string | null
-          observacoes?: string | null
-          respondida_em?: string | null
-          created_at?: string
-        }
-        Update: {
-          id?: string
-          nf_id?: string | null
-          token?: string | null
-          produto_correto?: boolean | null
-          atendeu_prazo?: boolean | null
-          recebeu_nota_boleto?: boolean | null
-          produto_atendeu_expectativas?: boolean | null
-          avaliacao_atendimento?: number | null
-          nps_score?: number | null
-          dificuldade_compra?: boolean | null
-          pontos_positivos?: string | null
-          pontos_melhoria?: string | null
-          compraria_novamente?: boolean | null
-          sugestoes?: string | null
-          observacoes?: string | null
-          respondida_em?: string | null
-          created_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "sac_pesquisas_nf_id_fkey"
-            columns: ["nf_id"]
-            isOneToOne: false
-            referencedRelation: "sac_notas_fiscais"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      expedicao_conferencias: {
-        Row: {
-          id: string
-          nf_id: string
-          item_idx: number
-          sku: string | null
-          descricao: string | null
-          qtd_pedida: number | null
-          qtd_conferida: number | null
-          divergencia_tipo: string | null
-          obs_divergencia: string | null
-          conferido_em: string | null
-          created_at: string
-          updated_at: string
-        }
-        Insert: {
-          id?: string
-          nf_id: string
-          item_idx: number
-          sku?: string | null
-          descricao?: string | null
-          qtd_pedida?: number | null
-          qtd_conferida?: number | null
-          divergencia_tipo?: string | null
-          obs_divergencia?: string | null
-          conferido_em?: string | null
-          created_at?: string
-          updated_at?: string
-        }
-        Update: {
-          id?: string
-          nf_id?: string
-          item_idx?: number
-          sku?: string | null
-          descricao?: string | null
-          qtd_pedida?: number | null
-          qtd_conferida?: number | null
-          divergencia_tipo?: string | null
-          obs_divergencia?: string | null
-          conferido_em?: string | null
-          created_at?: string
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "expedicao_conferencias_nf_id_fkey"
-            columns: ["nf_id"]
-            isOneToOne: false
-            referencedRelation: "sac_notas_fiscais"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
+      get_user_id_by_email: { Args: { email_input: string }; Returns: string }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
@@ -993,6 +1284,8 @@ export type Database = {
         | "engenharia"
         | "cliente"
         | "fornecedor"
+        | "produto"
+        | "producao"
       ticket_channel: "whatsapp" | "telefone" | "email" | "portal" | "manual"
       ticket_priority: "baixa" | "media" | "alta" | "critica"
       ticket_status:
@@ -1170,7 +1463,15 @@ export const Constants = {
         "qualidade",
         "nao_aplica",
       ],
-      root_cause: ["venda", "expedicao", "engenharia", "cliente", "fornecedor"],
+      root_cause: [
+        "venda",
+        "expedicao",
+        "engenharia",
+        "cliente",
+        "fornecedor",
+        "produto",
+        "producao",
+      ],
       ticket_channel: ["whatsapp", "telefone", "email", "portal", "manual"],
       ticket_priority: ["baixa", "media", "alta", "critica"],
       ticket_status: [

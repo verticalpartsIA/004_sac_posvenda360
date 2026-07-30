@@ -111,6 +111,18 @@ function TicketDetail() {
           <p className="mt-1 text-sm">{ticket.reason}</p>
         </div>
 
+        {ticket.sacNfId && (
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-gold/30 bg-gold-soft/20 p-3 text-sm">
+            <span className="text-muted-foreground">
+              Origem: <strong className="text-foreground">SAC / Pedido</strong>
+              {ticket.nfNumero && <> · Pedido {ticket.nfNumero}</>}
+            </span>
+            <Link to="/sac/$nf" params={{ nf: ticket.sacNfId }} className="text-xs font-semibold text-gold hover:underline">
+              Abrir SAC do pedido →
+            </Link>
+          </div>
+        )}
+
         {!isClosed && (
           <div className="mt-5 flex flex-wrap gap-2">
             {(["aberto", "analise", "laudo"] as TicketStatus[]).map((s) => (

@@ -1,9 +1,11 @@
-import { createFileRoute, useParams, Link } from "@tanstack/react-router";
+import { createFileRoute, useParams, useNavigate, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
+import { useStore } from "@/lib/store";
+import { OCCURRENCE_REASON_LABEL, STATUS_LABEL, type OccurrenceReason } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { ArrowLeft, Save, Truck, MessageCircle, Phone, CheckCircle2, Clock, Package, AlertTriangle, Send, Eye, EyeOff, ClipboardList, Camera, X } from "lucide-react";
+import { ArrowLeft, Save, Truck, MessageCircle, Phone, CheckCircle2, Clock, Package, AlertTriangle, Send, Eye, EyeOff, ClipboardList, Camera, X, PlusCircle } from "lucide-react";
 
 export const Route = createFileRoute("/_app/sac/$nf")({
   component: SacNFDetalhe,
@@ -163,9 +165,12 @@ function Estrelas({ value, onChange }: { value: number | null; onChange: (v: num
 export default function SacNFDetalhe() {
   const { nf: nfId } = useParams({ from: "/_app/sac/$nf" });
   const { user } = useAuth();
+  const navigate = useNavigate();
+  const { tickets } = useStore();
   const [nf, setNf] = useState<NFDetalhe | null>(null);
   const [pesquisa, setPesquisa] = useState<Pesquisa | null>(null);
   const [loading, setLoading] = useState(true);
+  const [motivoInicial, setMotivoInicial] = useState<OccurrenceReason | "">("");
 
   // Formulário Expedição
   const [exp, setExp] = useState({
@@ -576,6 +581,24 @@ export default function SacNFDetalhe() {
   const cfg = STATUS_CONFIG[nf.status_entrega];
   const StatusIcon = cfg.icon;
   const nomeCliente = nf.sac_clientes?.nome_fantasia ?? nf.razao_social_cliente;
+  const ocorrenciasVinculadas = tickets.filter((t) => t.sacNfId === nfId);
+
+  function abrirOcorrencia() {
+    navigate({
+      to: "/nova-ocorrencia",
+      search: {
+        sacNfId: nfId,
+        customer: nomeCliente,
+        customerDoc: nf!.cnpj_cliente,
+        customerContato: contato.contato_nome || undefined,
+        customerTelefone: contato.whatsapp || undefined,
+        nfNumero: nf!.numero_pedido_omie ?? nf!.nf_numero,
+        transportadora: nf!.transportadora ?? undefined,
+        rastreio: nf!.codigo_rastreio ?? undefined,
+        motivo: motivoInicial || undefined,
+      },
+    });
+  }
 
   return (
     <div className="space-y-5 max-w-3xl">
@@ -614,6 +637,60 @@ export default function SacNFDetalhe() {
             </button>
           </div>
           <div className="text-xs text-muted-foreground">Emissão {fmtDate(nf.data_emissao)}</div>
+        </div>
+      </div>
+
+      {/* ─── OCORRÊNCIA DE PÓS-VENDA ─── */}
+      <div className="rounded-xl border bg-card overflow-hidden">
+        <div className="flex items-center gap-2 border-b bg-red-50 px-5 py-3">
+          <AlertTriangle className="h-4 w-4 text-red-700" />
+          <h2 className="text-sm font-semibold text-red-800">Ocorrência de Pós-Venda</h2>
+        </div>
+        <div className="p-5 space-y-3">
+          {ocorrenciasVinculadas.length > 0 && (
+            <div className="space-y-2">
+              {ocorrenciasVinculadas.map((t) => (
+                <Link
+                  key={t.id}
+                  to="/ocorrencia/$ro"
+                  params={{ ro: t.code }}
+                  className="flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-background px-3 py-2 text-sm hover:bg-muted"
+                >
+                  <span>
+                    <span className="font-mono font-semibold">{t.code}</span>{" "}
+                    <span className="text-muted-foreground">
+                      · {STATUS_LABEL[t.status]}
+                      {t.occurrenceReason && <> · {OCCURRENCE_REASON_LABEL[t.occurrenceReason]}</>}
+                    </span>
+                  </span>
+                  <span className="text-xs font-semibold text-gold">Abrir ocorrência →</span>
+                </Link>
+              ))}
+            </div>
+          )}
+          <div className="flex flex-wrap items-center gap-2">
+            <select
+              value={motivoInicial}
+              onChange={(e) => setMotivoInicial(e.target.value as OccurrenceReason)}
+              aria-label="Motivo inicial da ocorrência"
+              className="rounded-lg border bg-background px-3 py-2 text-sm"
+            >
+              <option value="">Selecione o motivo inicial…</option>
+              {(Object.keys(OCCURRENCE_REASON_LABEL) as OccurrenceReason[]).map((k) => (
+                <option key={k} value={k}>{OCCURRENCE_REASON_LABEL[k]}</option>
+              ))}
+            </select>
+            <button
+              type="button"
+              onClick={abrirOcorrencia}
+              className="inline-flex items-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700"
+            >
+              <PlusCircle className="h-4 w-4" /> Abrir ocorrência deste pedido
+            </button>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Leva cliente, pedido, NF, transportadora e rastreio para a nova ocorrência. Nada é criado automaticamente — a ocorrência só existe se você concluir o fluxo em "Nova Ocorrência".
+          </p>
         </div>
       </div>
 

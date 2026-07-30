@@ -25,6 +25,11 @@ const REASON_TONE: Record<OccurrenceReason, string> = {
   atraso_entrega: "bg-orange-500/15 text-orange-600 border-orange-500/30 dark:text-orange-400",
   menor_quantidade: "bg-muted text-muted-foreground border-border",
   destinatario_errado: "bg-purple-500/15 text-purple-600 border-purple-500/30 dark:text-purple-400",
+  nao_chegou: "bg-red-500/15 text-red-600 border-red-500/30 dark:text-red-400",
+  produto_errado: "bg-purple-500/15 text-purple-600 border-purple-500/30 dark:text-purple-400",
+  produto_avariado: "bg-orange-500/15 text-orange-600 border-orange-500/30 dark:text-orange-400",
+  documento_nf_boleto: "bg-blue-500/15 text-blue-600 border-blue-500/30 dark:text-blue-400",
+  insatisfacao: "bg-destructive/10 text-destructive border-destructive/20",
   outros: "bg-muted text-muted-foreground border-border",
 };
 
@@ -114,7 +119,14 @@ function TicketsList() {
               >
                 <span className="font-mono text-xs font-semibold">{t.code}</span>
                 <div className="min-w-0">
-                  <div className="truncate font-medium">{t.customer}</div>
+                  <div className="flex items-center gap-1.5 truncate font-medium">
+                    {t.customer}
+                    {t.sacNfId && (
+                      <span className="rounded-md bg-gold-soft px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-gold-foreground">
+                        SAC
+                      </span>
+                    )}
+                  </div>
                   <div className="truncate text-xs text-muted-foreground">{t.part} · {t.partCode}</div>
                 </div>
                 {t.occurrenceReason ? (
