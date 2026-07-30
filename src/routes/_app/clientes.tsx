@@ -161,7 +161,7 @@ function ClientesPage() {
                   <td className="px-4 py-3">
                     <Link
                       to="/cliente/$cnpj"
-                      params={{ cnpj: encodeURIComponent(c.cnpj_cpf || c.id) }}
+                      params={{ cnpj: c.cnpj_cpf || c.id }}
                       className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
                     >
                       Ver histórico <ExternalLink className="h-3 w-3" />
