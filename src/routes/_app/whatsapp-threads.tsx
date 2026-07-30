@@ -2,8 +2,9 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import type { Database } from "@/integrations/supabase/types";
+import { useAuth } from "@/lib/auth";
 import { cn } from "@/lib/utils";
-import { MessageCircle, Search, RefreshCw, Wifi, WifiOff, Plus, X, Send } from "lucide-react";
+import { MessageCircle, Search, RefreshCw, Wifi, WifiOff, Plus, X, Send, Trash2 } from "lucide-react";
 
 export const Route = createFileRoute("/_app/whatsapp-threads")({
   component: WhatsappThreads,
@@ -208,14 +209,61 @@ function NovaConversaModal({
   );
 }
 
+// modal de confirmação de exclusão
+function ConfirmDeleteModal({
+  count,
+  busy,
+  onCancel,
+  onConfirm,
+}: {
+  count: number;
+  busy: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+      <div className="w-full max-w-sm rounded-xl border bg-card p-6 shadow-2xl mx-4">
+        <h2 className="text-lg font-semibold">Excluir {count === 1 ? "conversa" : `${count} conversas`}?</h2>
+        <p className="mt-2 text-sm text-muted-foreground">
+          Isso apaga permanentemente {count === 1 ? "as mensagens desta conversa" : "as mensagens dessas conversas"} do
+          WhatsApp. Essa ação não pode ser desfeita.
+        </p>
+        <div className="mt-5 flex gap-2">
+          <button
+            onClick={onCancel}
+            disabled={busy}
+            className="flex-1 rounded-lg border px-4 py-2 text-sm hover:bg-muted transition-colors disabled:opacity-50"
+          >
+            Cancelar
+          </button>
+          <button
+            onClick={onConfirm}
+            disabled={busy}
+            className="flex-1 inline-flex items-center justify-center gap-2 rounded-lg bg-destructive px-4 py-2 text-sm font-medium text-destructive-foreground hover:opacity-90 transition-colors disabled:opacity-50"
+          >
+            {busy ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+            {busy ? "Excluindo..." : "Excluir"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // componente principal
 function WhatsappThreads() {
   const navigate = useNavigate();
+  const { hasRole } = useAuth();
+  const canDelete = hasRole("admin");
   const [threads, setThreads] = useState<Thread[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [online, setOnline] = useState(true);
   const [showModal, setShowModal] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const msgsRef = useRef<WaMsg[]>([]);
 
   async function load() {
@@ -270,6 +318,45 @@ function WhatsappThreads() {
     );
   });
 
+  const allFilteredSelected = filtered.length > 0 && filtered.every((t) => selected.has(t.remoteJid));
+
+  function toggleOne(remoteJid: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(remoteJid)) next.delete(remoteJid);
+      else next.add(remoteJid);
+      return next;
+    });
+  }
+
+  function toggleAll() {
+    setSelected((prev) => {
+      if (allFilteredSelected) {
+        const next = new Set(prev);
+        filtered.forEach((t) => next.delete(t.remoteJid));
+        return next;
+      }
+      const next = new Set(prev);
+      filtered.forEach((t) => next.add(t.remoteJid));
+      return next;
+    });
+  }
+
+  async function confirmDelete() {
+    setDeleting(true);
+    const jids = Array.from(selected);
+    const { error } = await supabase.from("whatsapp_messages").delete().in("remote_jid", jids);
+    setDeleting(false);
+    setConfirmingDelete(false);
+    if (error) {
+      console.error("[threads] delete error:", error.message);
+      return;
+    }
+    msgsRef.current = msgsRef.current.filter((m) => !jids.includes(m.remote_jid));
+    setThreads(toThreads(msgsRef.current));
+    setSelected(new Set());
+  }
+
   return (
     <div className="space-y-5">
       {/* Header */}
@@ -292,6 +379,14 @@ function WhatsappThreads() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          {canDelete && selected.size > 0 && (
+            <button
+              onClick={() => setConfirmingDelete(true)}
+              className="inline-flex items-center gap-2 rounded-md bg-destructive px-3 py-2 text-sm text-destructive-foreground hover:opacity-90 transition-colors"
+            >
+              <Trash2 className="h-3.5 w-3.5" /> Excluir ({selected.size})
+            </button>
+          )}
           <button
             onClick={() => setShowModal(true)}
             className="inline-flex items-center gap-2 rounded-md bg-emerald-600 px-3 py-2 text-sm text-white hover:bg-emerald-700 transition-colors"
@@ -318,6 +413,18 @@ function WhatsappThreads() {
         />
       </div>
 
+      {canDelete && filtered.length > 0 && (
+        <label className="flex w-fit items-center gap-2 text-xs text-muted-foreground">
+          <input
+            type="checkbox"
+            checked={allFilteredSelected}
+            onChange={toggleAll}
+            className="h-3.5 w-3.5 rounded border-input"
+          />
+          Selecionar tudo
+        </label>
+      )}
+
       {/* List */}
       {loading ? (
         <div className="flex items-center justify-center py-20">
@@ -343,11 +450,19 @@ function WhatsappThreads() {
             {filtered.map((t) => {
               const name = displayName(t);
               return (
-                <li key={t.remoteJid}>
+                <li key={t.remoteJid} className="flex items-center">
+                  {canDelete && (
+                    <input
+                      type="checkbox"
+                      checked={selected.has(t.remoteJid)}
+                      onChange={() => toggleOne(t.remoteJid)}
+                      className="ml-4 h-3.5 w-3.5 shrink-0 rounded border-input"
+                    />
+                  )}
                   <Link
                     to="/thread/$id"
                     params={{ id: t.remoteJid }}
-                    className="flex items-center gap-4 px-4 py-3.5 hover:bg-muted/40 transition-colors"
+                    className="flex flex-1 items-center gap-4 px-4 py-3.5 hover:bg-muted/40 transition-colors"
                   >
                     {/* Avatar */}
                     <div className="relative shrink-0">
@@ -407,6 +522,16 @@ function WhatsappThreads() {
             setShowModal(false);
             navigate({ to: "/thread/$id", params: { id: remoteJid } });
           }}
+        />
+      )}
+
+      {/* Modal confirmação de exclusão */}
+      {confirmingDelete && (
+        <ConfirmDeleteModal
+          count={selected.size}
+          busy={deleting}
+          onCancel={() => setConfirmingDelete(false)}
+          onConfirm={() => void confirmDelete()}
         />
       )}
     </div>
