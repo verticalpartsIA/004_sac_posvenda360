@@ -76,9 +76,8 @@ function TicketDetail() {
     <div className="space-y-6">
       <div className="flex items-center justify-between gap-4">
         <Link to="/ocorrencias" className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground">
-          <ArrowLeft className="h-4 w-4" /> Tickets
+          <ArrowLeft className="h-4 w-4" /> Voltar para Ocorrências
         </Link>
-        <span className="font-mono text-xs font-semibold text-muted-foreground">{ticket.code}</span>
       </div>
 
       <div className="rounded-xl border bg-card p-6 shadow-[var(--shadow-elegant)]">
@@ -92,8 +91,11 @@ function TicketDetail() {
                 {ticket.channel === "whatsapp" ? "WhatsApp" : "Manual"}
               </span>
             </div>
-            <h1 className="mt-3 text-2xl font-semibold">{ticket.customer}</h1>
-            <p className="mt-1 text-sm text-muted-foreground">{ticket.part} · <span className="font-mono">{ticket.partCode}</span></p>
+            <div className="mt-3 flex items-baseline gap-2">
+              <h1 className="font-mono text-2xl font-bold text-gold-foreground">{ticket.code}</h1>
+            </div>
+            <p className="mt-1 text-base font-medium">{ticket.customer}</p>
+            <p className="mt-0.5 text-sm text-muted-foreground">{ticket.part} · <span className="font-mono">{ticket.partCode}</span></p>
           </div>
           <div className="w-full sm:w-56">
             <div className="mb-1 flex items-center justify-between text-xs">
@@ -294,20 +296,26 @@ function TicketDetail() {
         <div className="flex items-center gap-2 text-sm font-semibold">
           <Clock className="h-4 w-4 text-gold" /> Trilha de auditoria
         </div>
-        <ol className="mt-4 space-y-3">
-          {[...ticket.audit].reverse().map((a) => (
-            <li key={a.id} className="flex gap-3 border-l-2 border-gold/40 pl-4">
-              <div className="flex-1">
-                <div className="text-sm font-medium">{a.action}</div>
-                {a.detail && <div className="text-xs text-muted-foreground">{a.detail}</div>}
-                <div className="mt-0.5 flex items-center gap-2 text-[11px] text-muted-foreground">
-                  <User className="h-3 w-3" /> {a.actor} · {new Date(a.at).toLocaleString("pt-BR")}
+        {ticket.audit.length > 0 ? (
+          <ol className="mt-4 space-y-3">
+            {[...ticket.audit].reverse().map((a) => (
+              <li key={a.id} className="flex gap-3 border-l-2 border-gold/40 pl-4">
+                <div className="flex-1">
+                  <div className="text-sm font-medium">{a.action}</div>
+                  {a.detail && <div className="text-xs text-muted-foreground">{a.detail}</div>}
+                  <div className="mt-0.5 flex items-center gap-2 text-[11px] text-muted-foreground">
+                    <User className="h-3 w-3" /> {a.actor} · {new Date(a.at).toLocaleString("pt-BR")}
+                  </div>
                 </div>
-              </div>
-            </li>
-          ))}
-        </ol>
-        <p className="mt-4 text-[11px] text-muted-foreground">Logs imutáveis · Conformidade LGPD</p>
+              </li>
+            ))}
+          </ol>
+        ) : (
+          <p className="mt-4 text-xs text-muted-foreground">Nenhum evento registrado para esta ocorrência ainda.</p>
+        )}
+        {ticket.audit.length > 0 && (
+          <p className="mt-4 text-[11px] text-muted-foreground">Logs imutáveis · Conformidade LGPD</p>
+        )}
       </div>
     </div>
   );

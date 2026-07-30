@@ -260,17 +260,23 @@ function NewTicket() {
         {/* ===== PASSO 1 ===== */}
         {step === 1 && !created && (
           <div className="space-y-5">
-            <div className="grid gap-3 sm:grid-cols-2">
+            <div role="group" aria-label="Canal da ocorrência" className="grid gap-3 sm:grid-cols-2">
               <ChannelCard active={channel === "whatsapp"} onClick={() => setChannel("whatsapp")} icon={MessageCircle} title="WhatsApp" desc="Vincular conversa do WhatsApp Business" />
               <ChannelCard active={channel === "manual"} onClick={() => setChannel("manual")} icon={FileEdit} title="Manual" desc="Telefone, e-mail ou portal" />
             </div>
 
-            <Field label="Buscar cliente (nome, CNPJ/CPF ou telefone) *">
+            <Field label="Buscar cliente (nome, CNPJ/CPF ou telefone) *" htmlFor="customerSearch">
               <div className="relative">
                 <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">
                   <Search className="h-4 w-4" />
                 </span>
                 <input
+                  id="customerSearch"
+                  name="customerSearch"
+                  required
+                  aria-required="true"
+                  aria-invalid={!!err && !form.customer}
+                  aria-describedby={err && !form.customer ? "customerSearch-error" : undefined}
                   value={clientQuery}
                   onChange={(e) => { setClientQuery(e.target.value); setShowSuggest(true); }}
                   onFocus={() => setShowSuggest(true)}
@@ -580,7 +586,15 @@ function NewTicket() {
           </div>
         )}
 
-        {err && <div className="mt-4 rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">{err}</div>}
+        {err && (
+          <div
+            id={step === 1 && !form.customer ? "customerSearch-error" : undefined}
+            role="alert"
+            className="mt-4 rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive"
+          >
+            {err}
+          </div>
+        )}
 
         {/* Footer nav */}
         {!created && (
@@ -605,9 +619,9 @@ function NewTicket() {
 
 const inputCls = "w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none transition focus:ring-2 focus:ring-ring";
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({ label, htmlFor, children }: { label: string; htmlFor?: string; children: React.ReactNode }) {
   return (
-    <label className="block space-y-1.5">
+    <label htmlFor={htmlFor} className="block space-y-1.5">
       <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{label}</span>
       {children}
     </label>
@@ -643,6 +657,7 @@ function ChannelCard({ active, onClick, icon: Icon, title, desc }: { active: boo
     <button
       type="button"
       onClick={onClick}
+      aria-pressed={active}
       className={cn(
         "flex items-center gap-3 rounded-xl border p-4 text-left transition-all",
         active ? "border-gold bg-gold-soft shadow-[var(--shadow-gold)]" : "bg-card hover:border-gold/40",

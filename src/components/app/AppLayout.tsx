@@ -178,6 +178,8 @@ export function AppLayout() {
         <Logo />
         <button
           onClick={() => setMenuOpen((v) => !v)}
+          aria-label={menuOpen ? "Fechar menu" : "Abrir menu"}
+          aria-expanded={menuOpen}
           className="rounded-md border border-sidebar-border p-2 text-white hover:text-gold hover:border-gold"
         >
           <ChevronDown className={cn("h-4 w-4 transition-transform", menuOpen && "rotate-180")} />
@@ -248,7 +250,7 @@ export function AppLayout() {
             )}
           </div>
           <div className="flex items-center gap-3" ref={userMenuRef}>
-            <button className="rounded-md p-2 hover:bg-muted">
+            <button aria-label="Notificações" className="rounded-md p-2 hover:bg-muted">
               <Bell className="h-4 w-4" />
             </button>
             <div className="relative">
