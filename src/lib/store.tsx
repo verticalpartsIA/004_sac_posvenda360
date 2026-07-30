@@ -1013,31 +1013,52 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     [loadAll, writeAudit],
   );
 
-  return (
-    <Ctx.Provider
-      value={{
-        tickets,
-        internalTickets,
-        npsRecords,
-        storeReady,
-        currentUser,
-        globalSearchQuery,
-        setGlobalSearchQuery,
-        createTicket,
-        updateStatus,
-        assignTicket,
-        resolveTicket,
-        setNps,
-        createInternalTicket,
-        respondInternalTicket,
-        updateInternalStatus,
-        submitNpsSurvey,
-        updateQualidade,
-      }}
-    >
-      {children}
-    </Ctx.Provider>
+  // Memoizado: sem isso, qualquer tecla digitada na busca (globalSearchQuery)
+  // recria este objeto e força TODOS os consumidores do contexto a
+  // re-renderizar — incluindo a lista inteira de tickets — o que sob
+  // digitação rápida atrasa frames e pode fazer teclas parecerem "perdidas".
+  const value = useMemo<StoreCtx>(
+    () => ({
+      tickets,
+      internalTickets,
+      npsRecords,
+      storeReady,
+      currentUser,
+      globalSearchQuery,
+      setGlobalSearchQuery,
+      createTicket,
+      updateStatus,
+      assignTicket,
+      resolveTicket,
+      setNps,
+      createInternalTicket,
+      respondInternalTicket,
+      updateInternalStatus,
+      submitNpsSurvey,
+      updateQualidade,
+    }),
+    [
+      tickets,
+      internalTickets,
+      npsRecords,
+      storeReady,
+      currentUser,
+      globalSearchQuery,
+      setGlobalSearchQuery,
+      createTicket,
+      updateStatus,
+      assignTicket,
+      resolveTicket,
+      setNps,
+      createInternalTicket,
+      respondInternalTicket,
+      updateInternalStatus,
+      submitNpsSurvey,
+      updateQualidade,
+    ],
   );
+
+  return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
 
 export function useStore() {

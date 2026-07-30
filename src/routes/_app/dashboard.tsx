@@ -176,7 +176,7 @@ function OperatorDashboard() {
           {sorted.length === 0 && (
             <li className="px-5 py-12 text-center text-sm text-muted-foreground">
               {activeFilters.length > 0 || query
-                ? "Nenhum ticket encontrado para os filtros/busca atuais."
+                ? "Nenhum resultado encontrado."
                 : "Nenhum ticket em andamento. ✨"}
             </li>
           )}
