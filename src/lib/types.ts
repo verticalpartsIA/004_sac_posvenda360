@@ -19,6 +19,11 @@ export type OccurrenceReason =
   | "destinatario_errado"
   | "troca_material"
   | "atraso_entrega"
+  | "nao_chegou"
+  | "produto_errado"
+  | "produto_avariado"
+  | "documento_nf_boleto"
+  | "insatisfacao"
   | "outros";
 
 export type ResponsibleSector =
@@ -41,6 +46,11 @@ export const OCCURRENCE_REASON_LABEL: Record<OccurrenceReason, string> = {
   destinatario_errado: "Destinatário errado",
   troca_material: "Troca de material",
   atraso_entrega: "Atraso na entrega",
+  nao_chegou: "Não chegou / Extraviado",
+  produto_errado: "Chegou produto errado",
+  produto_avariado: "Produto avariado",
+  documento_nf_boleto: "Documento (NF/Boleto)",
+  insatisfacao: "Insatisfação do cliente",
   outros: "Outros",
 };
 
@@ -202,6 +212,7 @@ export interface Ticket {
   classificacaoQualidade?: string;
   observacoesQualidade?: string;
   whatsappThreadId?: string;
+  sacNfId?: string;
   dataInicioAnalise?: string;
   dataLimiteAtendimento?: string;
   dataFinalizacao?: string;

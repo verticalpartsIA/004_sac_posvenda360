@@ -329,6 +329,7 @@ function mapTicket(
     classificacaoQualidade: meta.quality?.classificacaoQualidade,
     observacoesQualidade: meta.quality?.observacoesQualidade,
     whatsappThreadId: row.whatsapp_thread_id ?? undefined,
+    sacNfId: row.sac_nf_id ?? undefined,
     dataInicioAnalise: row.updated_at,
     dataLimiteAtendimento: new Date(
       new Date(row.created_at).getTime() + row.sla_hours * 60 * 60 * 1000,
@@ -447,6 +448,7 @@ interface NewTicketInput {
   acaoContencao?: ContainmentAction[];
   whatsappThreadId?: string;
   productFamily?: string;
+  sacNfId?: string;
 }
 
 interface NewInternalTicketInput {
@@ -604,6 +606,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           priority: input.priority,
           sla_hours: input.slaHours,
           whatsapp_thread_id: input.whatsappThreadId ?? null,
+          sac_nf_id: input.sacNfId ?? null,
           acao_contencao: denormalizeContainmentActions(input.acaoContencao),
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           ...(input.productFamily ? { product_family: input.productFamily } as any : {}),

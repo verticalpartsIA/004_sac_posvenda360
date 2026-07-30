@@ -1,4 +1,4 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { useStore } from "@/lib/store";
 import {
@@ -23,7 +23,30 @@ import { fetchClientesAtivosFn, fetchProdutosAtivosFn } from "@/integrations/sup
 import { MessageCircle, FileEdit, Check, Bell, Mail, Phone, Search, ImageIcon, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
+type NovaOcorrenciaSearch = {
+  sacNfId?: string;
+  customer?: string;
+  customerDoc?: string;
+  customerContato?: string;
+  customerTelefone?: string;
+  nfNumero?: string;
+  transportadora?: string;
+  rastreio?: string;
+  motivo?: OccurrenceReason;
+};
+
 export const Route = createFileRoute("/_app/nova-ocorrencia")({
+  validateSearch: (search: Record<string, unknown>): NovaOcorrenciaSearch => ({
+    sacNfId: typeof search.sacNfId === "string" ? search.sacNfId : undefined,
+    customer: typeof search.customer === "string" ? search.customer : undefined,
+    customerDoc: typeof search.customerDoc === "string" ? search.customerDoc : undefined,
+    customerContato: typeof search.customerContato === "string" ? search.customerContato : undefined,
+    customerTelefone: typeof search.customerTelefone === "string" ? search.customerTelefone : undefined,
+    nfNumero: typeof search.nfNumero === "string" ? search.nfNumero : undefined,
+    transportadora: typeof search.transportadora === "string" ? search.transportadora : undefined,
+    rastreio: typeof search.rastreio === "string" ? search.rastreio : undefined,
+    motivo: typeof search.motivo === "string" ? (search.motivo as OccurrenceReason) : undefined,
+  }),
   loader: async () => {
     const [clientes, produtos] = await Promise.all([
       fetchClientesAtivosFn(),
@@ -43,20 +66,21 @@ const STEPS = [
 
 function NewTicket() {
   const { clientes: erpClientes, produtos: erpProdutos } = Route.useLoaderData();
+  const search = Route.useSearch();
   const { createTicket, createInternalTicket, tickets } = useStore();
   const navigate = useNavigate();
   const [step, setStep] = useState(1);
   const [channel, setChannel] = useState<TicketChannel>("manual");
-  const [clientQuery, setClientQuery] = useState("");
+  const [clientQuery, setClientQuery] = useState(search.customer ?? "");
   const [showSuggest, setShowSuggest] = useState(false);
   const [partQuery, setPartQuery] = useState("");
   const [showPartSuggest, setShowPartSuggest] = useState(false);
 
   const [form, setForm] = useState({
-    customer: "",
-    customerDoc: "",
-    customerContato: "",
-    customerTelefone: "",
+    customer: search.customer ?? "",
+    customerDoc: search.customerDoc ?? "",
+    customerContato: search.customerContato ?? "",
+    customerTelefone: search.customerTelefone ?? "",
     city: "",
     state: "",
     fornecedor: "",
@@ -64,19 +88,20 @@ function NewTicket() {
     partCode: "",
     vendedor: "",
     productFamily: "",
-    nfNumero: "",
+    nfNumero: search.nfNumero ?? "",
     nfValor: 0,
     quantity: 1,
     unitValue: 0,
     reason: "",
     priority: "media" as TicketPriority,
     slaHours: 48,
-    occurrenceReason: "devolucao_total" as OccurrenceReason,
+    occurrenceReason: (search.motivo ?? "devolucao_total") as OccurrenceReason,
     responsibleSector: "nao_aplica" as ResponsibleSector,
     origin: "externo" as OccurrenceOrigin,
     resolutionStatus: "em_analise" as ResolutionStatus,
     emitente: "",
     whatsappThreadId: "",
+    sacNfId: search.sacNfId ?? "",
   });
   const [photos, setPhotos] = useState<{ name: string; url: string }[]>([]);
   const [contencao, setContencao] = useState<ContainmentAction[]>([]);
@@ -193,7 +218,7 @@ function NewTicket() {
         setTimeout(() => reject(new Error("Tempo esgotado (20 s). Verifique sua conexão e tente novamente.")), 20_000),
       );
       const t = await Promise.race([
-        createTicket({ ...form, channel, acaoContencao: contencao }),
+        createTicket({ ...form, sacNfId: form.sacNfId || undefined, channel, acaoContencao: contencao }),
         deadline,
       ]);
       let internalCode: string | undefined;
@@ -260,6 +285,19 @@ function NewTicket() {
         {/* ===== PASSO 1 ===== */}
         {step === 1 && !created && (
           <div className="space-y-5">
+            {form.sacNfId && (
+              <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-gold/30 bg-gold-soft/30 p-3 text-sm">
+                <div>
+                  <span className="font-semibold">Ocorrência vinculada ao pedido</span>
+                  {form.nfNumero && <span className="text-muted-foreground"> · Pedido {form.nfNumero}</span>}
+                  {search.transportadora && <span className="text-muted-foreground"> · {search.transportadora}</span>}
+                  {search.rastreio && <span className="text-muted-foreground font-mono"> · {search.rastreio}</span>}
+                </div>
+                <Link to="/sac/$nf" params={{ nf: form.sacNfId }} className="text-xs font-semibold text-gold hover:underline">
+                  Voltar para o SAC do pedido →
+                </Link>
+              </div>
+            )}
             <div role="group" aria-label="Canal da ocorrência" className="grid gap-3 sm:grid-cols-2">
               <ChannelCard active={channel === "whatsapp"} onClick={() => setChannel("whatsapp")} icon={MessageCircle} title="WhatsApp" desc="Vincular conversa do WhatsApp Business" />
               <ChannelCard active={channel === "manual"} onClick={() => setChannel("manual")} icon={FileEdit} title="Manual" desc="Telefone, e-mail ou portal" />
@@ -561,6 +599,9 @@ function NewTicket() {
                 </div>
 
                 <div className="flex flex-wrap justify-end gap-2">
+                  {form.sacNfId && (
+                    <button onClick={() => navigate({ to: "/sac/$nf", params: { nf: form.sacNfId } })} className="rounded-md border px-4 py-2 text-sm font-medium hover:bg-muted">Voltar para o SAC do pedido</button>
+                  )}
                   <button onClick={() => navigate({ to: "/ocorrencias" })} className="rounded-md border px-4 py-2 text-sm font-medium hover:bg-muted">Ver fila</button>
                   <button onClick={() => navigate({ to: "/ocorrencia/$ro", params: { ro: created.roNumber } })} className="rounded-md bg-primary px-5 py-2 text-sm font-medium text-primary-foreground hover:opacity-90">Abrir {created.roNumber}</button>
                 </div>
