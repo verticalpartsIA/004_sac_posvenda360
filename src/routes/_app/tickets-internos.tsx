@@ -102,19 +102,22 @@ function InternalTickets() {
                 </li>
               );
             })}
-            {internalTickets.length === 0 && (
+            {filtered.length === 0 && (
               <li className="px-5 py-12 text-center text-sm text-muted-foreground">
-                Nenhum ticket interno aberto.{" "}
-                <button onClick={() => setOpen(true)} className="text-gold hover:underline">Abrir o primeiro</button>
-              </li>
-            )}
-            {internalTickets.length > 0 && query && filtered.length === 0 && (
-              <li className="px-5 py-12 text-center text-sm text-muted-foreground">
-                Nenhum ticket interno encontrado para "{globalSearchQuery.trim()}".
-                <br />
-                <button onClick={() => setGlobalSearchQuery("")} className="mt-2 text-gold hover:underline">
-                  Limpar busca
-                </button>
+                {query ? (
+                  <>
+                    Nenhum ticket interno encontrado para "{globalSearchQuery.trim()}".
+                    <br />
+                    <button onClick={() => setGlobalSearchQuery("")} className="mt-2 text-gold hover:underline">
+                      Limpar busca
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    Nenhum ticket interno aberto.{" "}
+                    <button onClick={() => setOpen(true)} className="text-gold hover:underline">Abrir o primeiro</button>
+                  </>
+                )}
               </li>
             )}
           </ul>

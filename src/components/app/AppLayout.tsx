@@ -235,7 +235,13 @@ export function AppLayout() {
             <input
               value={globalSearchQuery}
               onChange={(e) => setGlobalSearchQuery(e.target.value)}
-              placeholder={path.startsWith("/meus-tickets") ? "Buscar na minha fila..." : "Buscar ticket, cliente, peça..."}
+              placeholder={
+                path.startsWith("/meus-tickets")
+                  ? "Buscar na minha fila..."
+                  : path.startsWith("/tickets-internos")
+                  ? "Buscar por assunto, setor, RO ou cliente..."
+                  : "Buscar ticket, cliente, peça..."
+              }
               className="w-full bg-transparent outline-none placeholder:text-muted-foreground/60"
             />
             {globalSearchQuery && (
