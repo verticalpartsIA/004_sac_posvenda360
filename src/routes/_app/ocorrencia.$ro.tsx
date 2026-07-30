@@ -283,7 +283,11 @@ function TicketDetail() {
                   </div>
                   <div className="text-sm font-medium">{it.subject}</div>
                 </div>
-                <Link to="/tickets-internos" className="text-[11px] font-semibold text-gold hover:underline">
+                <Link
+                  to="/tickets-internos"
+                  search={{ from: "ocorrencia", ro: ticket.code }}
+                  className="text-[11px] font-semibold text-gold hover:underline"
+                >
                   {INTERNAL_STATUS_LABEL[it.status]} →
                 </Link>
               </li>
@@ -363,14 +367,15 @@ function QuickInternalDialog({
   }) => void;
 }) {
   const [form, setForm] = useState({
-    targetDepartment: "engenharia" as InternalDepartment,
+    targetDepartment: "" as InternalDepartment | "",
     priority: "media" as InternalPriority,
     subject: "",
     description: "",
     slaHours: 24,
   });
   const [intPhotos, setIntPhotos] = useState<{ name: string; url: string }[]>([]);
-  const valid = form.subject.trim() && form.description.trim();
+  const slaValid = Number.isInteger(form.slaHours) && form.slaHours >= 1;
+  const valid = !!form.targetDepartment && form.subject.trim() && form.description.trim() && slaValid;
 
   function handleIntPhotoChange(e: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files ?? []);
@@ -391,6 +396,7 @@ function QuickInternalDialog({
             onChange={(e) => setForm({ ...form, targetDepartment: e.target.value as InternalDepartment })}
             className="w-full rounded-md border bg-background px-3 py-2 text-sm"
           >
+            <option value="" disabled>Selecione o setor</option>
             {(Object.keys(INTERNAL_DEPT_LABEL) as InternalDepartment[]).map((d) => (
               <option key={d} value={d}>{INTERNAL_DEPT_LABEL[d]}</option>
             ))}
@@ -406,14 +412,18 @@ function QuickInternalDialog({
               <option value="alta">Alta</option>
               <option value="critica">Crítica</option>
             </select>
-            <input
-              type="number"
-              min={1}
-              value={form.slaHours}
-              onChange={(e) => setForm({ ...form, slaHours: Number(e.target.value) })}
-              className="w-full rounded-md border bg-background px-3 py-2 text-sm"
-              placeholder="SLA (h)"
-            />
+            <div>
+              <input
+                type="number"
+                min={1}
+                value={form.slaHours}
+                onChange={(e) => setForm({ ...form, slaHours: Number(e.target.value) })}
+                aria-invalid={!slaValid}
+                className={cn("w-full rounded-md border bg-background px-3 py-2 text-sm", !slaValid && "border-destructive")}
+                placeholder="SLA (h)"
+              />
+              {!slaValid && <p className="mt-1 text-[11px] text-destructive">Mínimo 1 hora.</p>}
+            </div>
           </div>
           <input
             value={form.subject}
@@ -452,7 +462,7 @@ function QuickInternalDialog({
           <button onClick={onClose} className="rounded-md border px-4 py-2 text-sm hover:bg-muted">Cancelar</button>
           <button
             disabled={!valid}
-            onClick={() => onCreate(form)}
+            onClick={() => valid && onCreate({ ...form, targetDepartment: form.targetDepartment as InternalDepartment })}
             className="rounded-md bg-primary px-5 py-2 text-sm font-semibold text-primary-foreground disabled:opacity-50"
           >
             Abrir
