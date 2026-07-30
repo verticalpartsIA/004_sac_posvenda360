@@ -31,15 +31,16 @@ const REASON_TONE: Record<OccurrenceReason, string> = {
 function TicketsList() {
   const { tickets, globalSearchQuery, setGlobalSearchQuery } = useStore();
   const [filter, setFilter] = useState<(typeof filters)[number]>("todos");
-  const [q, setQ] = useState("");
 
-  // A busca local desta página tem prioridade; se estiver vazia, cai pra
-  // busca global do header (AppLayout), pra manter as duas consistentes.
-  const effectiveQuery = (q || globalSearchQuery).trim().toLowerCase();
+  // Mesmo estado de busca do header (AppLayout) — sem estado local duplicado,
+  // pra não ter dois valores brigando por qual é a fonte da verdade (isso
+  // causava o campo "travar" ao tentar limpar: limpar o local só revelava o
+  // valor global antigo por baixo).
+  const query = globalSearchQuery.trim().toLowerCase();
 
   const filtered = tickets.filter((t) => {
     if (filter !== "todos" && t.status !== filter) return false;
-    if (effectiveQuery && !`${t.code} ${t.customer} ${t.part} ${t.partCode}`.toLowerCase().includes(effectiveQuery)) return false;
+    if (query && !`${t.code} ${t.customer} ${t.part} ${t.partCode}`.toLowerCase().includes(query)) return false;
     return true;
   });
 
@@ -59,18 +60,15 @@ function TicketsList() {
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="relative w-full sm:w-80">
             <input
-              value={q || globalSearchQuery}
-              onChange={(e) => setQ(e.target.value)}
+              value={globalSearchQuery}
+              onChange={(e) => setGlobalSearchQuery(e.target.value)}
               placeholder="Buscar por código, cliente, peça..."
               className="w-full rounded-md border bg-background px-3 py-2 pr-8 text-sm outline-none focus:ring-2 focus:ring-ring"
             />
-            {effectiveQuery && (
+            {globalSearchQuery && (
               <button
                 type="button"
-                onClick={() => {
-                  setQ("");
-                  setGlobalSearchQuery("");
-                }}
+                onClick={() => setGlobalSearchQuery("")}
                 title="Limpar busca"
                 className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
               >
@@ -136,7 +134,13 @@ function TicketsList() {
               </Link>
             </li>
           ))}
-          {filtered.length === 0 && <li className="px-5 py-12 text-center text-sm text-muted-foreground">Nenhum ticket encontrado.</li>}
+          {filtered.length === 0 && (
+            <li className="px-5 py-12 text-center text-sm text-muted-foreground">
+              {query || filter !== "todos"
+                ? "Nenhum ticket encontrado para os filtros/busca atuais."
+                : "Nenhum ticket encontrado."}
+            </li>
+          )}
         </ul>
       </div>
     </div>

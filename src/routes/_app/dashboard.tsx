@@ -157,6 +157,7 @@ function OperatorDashboard() {
                       <button
                         type="button"
                         title="Atribuir a mim"
+                        aria-label="Atribuir a mim"
                         onClick={(e) => {
                           e.preventDefault();
                           e.stopPropagation();
