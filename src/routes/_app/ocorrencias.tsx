@@ -136,9 +136,7 @@ function TicketsList() {
           ))}
           {filtered.length === 0 && (
             <li className="px-5 py-12 text-center text-sm text-muted-foreground">
-              {query || filter !== "todos"
-                ? "Nenhum ticket encontrado para os filtros/busca atuais."
-                : "Nenhum ticket encontrado."}
+              {query || filter !== "todos" ? "Nenhum resultado encontrado." : "Nenhum ticket encontrado."}
             </li>
           )}
         </ul>
