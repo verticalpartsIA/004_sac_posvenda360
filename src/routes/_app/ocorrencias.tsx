@@ -1,5 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
+import { X } from "lucide-react";
 import { useStore } from "@/lib/store";
 import { StatusBadge, PriorityBadge } from "@/components/app/StatusBadge";
 import { SlaBar } from "@/components/app/SlaBar";
@@ -28,7 +29,7 @@ const REASON_TONE: Record<OccurrenceReason, string> = {
 };
 
 function TicketsList() {
-  const { tickets, globalSearchQuery } = useStore();
+  const { tickets, globalSearchQuery, setGlobalSearchQuery } = useStore();
   const [filter, setFilter] = useState<(typeof filters)[number]>("todos");
   const [q, setQ] = useState("");
 
@@ -56,12 +57,27 @@ function TicketsList() {
 
       <div className="rounded-xl border bg-card p-4 shadow-[var(--shadow-elegant)]">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <input
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="Buscar por código, cliente, peça..."
-            className="w-full rounded-md border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring sm:w-80"
-          />
+          <div className="relative w-full sm:w-80">
+            <input
+              value={q || globalSearchQuery}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="Buscar por código, cliente, peça..."
+              className="w-full rounded-md border bg-background px-3 py-2 pr-8 text-sm outline-none focus:ring-2 focus:ring-ring"
+            />
+            {effectiveQuery && (
+              <button
+                type="button"
+                onClick={() => {
+                  setQ("");
+                  setGlobalSearchQuery("");
+                }}
+                title="Limpar busca"
+                className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
           <div className="flex flex-wrap gap-1.5">
             {filters.map((f) => (
               <button
