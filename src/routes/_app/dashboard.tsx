@@ -44,7 +44,7 @@ function matchesFilter(t: ReturnType<typeof useStore>["tickets"][number], filter
 }
 
 function OperatorDashboard() {
-  const { tickets, assignTicket } = useStore();
+  const { tickets, assignTicket, globalSearchQuery } = useStore();
   const { user, roles } = useAuth();
   const [activeFilters, setActiveFilters] = useState<QuickFilter[]>([]);
 
@@ -62,9 +62,15 @@ function OperatorDashboard() {
   const toggleFilter = (key: QuickFilter) =>
     setActiveFilters((prev) => (prev.includes(key) ? prev.filter((f) => f !== key) : [...prev, key]));
 
+  const query = globalSearchQuery.trim().toLowerCase();
   const filtered = useMemo(
-    () => open.filter((t) => activeFilters.every((f) => matchesFilter(t, f))),
-    [open, activeFilters],
+    () =>
+      open.filter((t) => {
+        if (!activeFilters.every((f) => matchesFilter(t, f))) return false;
+        if (query && !`${t.code} ${t.customer} ${t.part} ${t.partCode}`.toLowerCase().includes(query)) return false;
+        return true;
+      }),
+    [open, activeFilters, query],
   );
   const sorted = [...filtered].sort((a, b) => slaStatus(b).pct - slaStatus(a).pct);
 
@@ -96,7 +102,7 @@ function OperatorDashboard() {
             <div>
               <h2 className="text-base font-semibold">Fila de atendimento</h2>
               <p className="text-xs text-muted-foreground">
-                {activeFilters.length > 0
+                {activeFilters.length > 0 || query
                   ? `${sorted.length} de ${open.length} tickets · filtrado`
                   : "Ordenada por proximidade do SLA"}
               </p>
@@ -168,7 +174,9 @@ function OperatorDashboard() {
           })}
           {sorted.length === 0 && (
             <li className="px-5 py-12 text-center text-sm text-muted-foreground">
-              {activeFilters.length > 0 ? "Nenhum ticket corresponde aos filtros." : "Nenhum ticket em andamento. ✨"}
+              {activeFilters.length > 0 || query
+                ? "Nenhum ticket encontrado para os filtros/busca atuais."
+                : "Nenhum ticket em andamento. ✨"}
             </li>
           )}
         </ul>

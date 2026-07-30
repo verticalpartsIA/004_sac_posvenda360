@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useStore } from "@/lib/store";
 import { StatusBadge, PriorityBadge } from "@/components/app/StatusBadge";
 import { SlaBar } from "@/components/app/SlaBar";
@@ -12,12 +12,7 @@ import {
 } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
-export const Route = createFileRoute("/_app/ocorrencias")({
-  component: TicketsList,
-  validateSearch: (search: Record<string, unknown>): { q?: string } => ({
-    q: typeof search.q === "string" ? search.q : undefined,
-  }),
-});
+export const Route = createFileRoute("/_app/ocorrencias")({ component: TicketsList });
 
 const filters: ("todos" | TicketStatus)[] = ["todos", "aberto", "analise", "laudo", "concluido"];
 
@@ -33,20 +28,17 @@ const REASON_TONE: Record<OccurrenceReason, string> = {
 };
 
 function TicketsList() {
-  const { tickets } = useStore();
-  const { q: initialQ } = Route.useSearch();
+  const { tickets, globalSearchQuery } = useStore();
   const [filter, setFilter] = useState<(typeof filters)[number]>("todos");
-  const [q, setQ] = useState(initialQ ?? "");
+  const [q, setQ] = useState("");
 
-  // Sincroniza com a busca global do header (AppLayout), que navega pra cá
-  // com `?q=` — sem isso, buscar de novo estando já nesta página não atualiza.
-  useEffect(() => {
-    if (initialQ !== undefined) setQ(initialQ);
-  }, [initialQ]);
+  // A busca local desta página tem prioridade; se estiver vazia, cai pra
+  // busca global do header (AppLayout), pra manter as duas consistentes.
+  const effectiveQuery = (q || globalSearchQuery).trim().toLowerCase();
 
   const filtered = tickets.filter((t) => {
     if (filter !== "todos" && t.status !== filter) return false;
-    if (q && !`${t.code} ${t.customer} ${t.part} ${t.partCode}`.toLowerCase().includes(q.toLowerCase())) return false;
+    if (effectiveQuery && !`${t.code} ${t.customer} ${t.part} ${t.partCode}`.toLowerCase().includes(effectiveQuery)) return false;
     return true;
   });
 

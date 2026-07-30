@@ -485,6 +485,8 @@ interface StoreCtx {
   npsRecords: NpsRecord[];
   storeReady: boolean;
   currentUser: string;
+  globalSearchQuery: string;
+  setGlobalSearchQuery: (q: string) => void;
   createTicket: (i: NewTicketInput) => Promise<Ticket>;
   updateStatus: (id: string, status: TicketStatus) => void;
   assignTicket: (id: string, userId: string | null) => void;
@@ -506,6 +508,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [internalTickets, setInternalTickets] = useState<InternalTicket[]>([]);
   const [npsRecords, setNpsRecords] = useState<NpsRecord[]>([]);
   const [storeReady, setStoreReady] = useState(false);
+  // Busca global do header (AppLayout) — consumida por qualquer página que
+  // liste tickets (Dashboard, Ocorrências) pra filtrar em tempo real, sem
+  // precisar de Enter/navegação.
+  const [globalSearchQuery, setGlobalSearchQuery] = useState("");
 
   const loadAll = useCallback(async () => {
     const [ticketsRes, internalRes, messagesRes, auditsRes, npsRes] = await Promise.all([
@@ -1015,6 +1021,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         npsRecords,
         storeReady,
         currentUser,
+        globalSearchQuery,
+        setGlobalSearchQuery,
         createTicket,
         updateStatus,
         assignTicket,
