@@ -20,6 +20,7 @@ import {
 import { Logo } from "./Logo";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth";
+import { useStore } from "@/lib/store";
 import { useEffect, useRef, useState } from "react";
 import { formatBuildTimeShort, useAppVersion } from "@/lib/versionCheck";
 
@@ -80,7 +81,7 @@ export function AppLayout() {
   const { user, roles, signOut } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
-  const [globalSearch, setGlobalSearch] = useState("");
+  const { globalSearchQuery, setGlobalSearchQuery } = useStore();
   const userMenuRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -226,22 +227,15 @@ export function AppLayout() {
 
       <main className="lg:pl-[240px]">
         <div className="sticky top-0 z-20 hidden items-center justify-between border-b bg-background/80 px-8 py-4 backdrop-blur lg:flex">
-          <form
-            className="flex items-center gap-2 text-sm text-muted-foreground"
-            onSubmit={(e) => {
-              e.preventDefault();
-              const term = globalSearch.trim();
-              if (term) navigate({ to: "/ocorrencias", search: { q: term } });
-            }}
-          >
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <Search className="h-4 w-4" />
             <input
-              value={globalSearch}
-              onChange={(e) => setGlobalSearch(e.target.value)}
+              value={globalSearchQuery}
+              onChange={(e) => setGlobalSearchQuery(e.target.value)}
               placeholder="Buscar ticket, cliente, peça..."
               className="w-80 bg-transparent outline-none placeholder:text-muted-foreground/60"
             />
-          </form>
+          </div>
           <div className="flex items-center gap-3" ref={userMenuRef}>
             <button className="rounded-md p-2 hover:bg-muted">
               <Bell className="h-4 w-4" />
