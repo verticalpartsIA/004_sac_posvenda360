@@ -10,6 +10,7 @@ import {
   type InternalTicketStatus,
 } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { Modal } from "@/components/app/Modal";
 import { Plus, Building2, Clock } from "lucide-react";
 
 export const Route = createFileRoute("/_app/tickets-internos")({ component: InternalTickets });
@@ -251,10 +252,9 @@ function NewInternalDialog({
   const valid = form.subject.trim() && form.description.trim();
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="w-full max-w-lg rounded-xl border bg-card p-6 shadow-[var(--shadow-elegant)]">
-        <h2 className="text-lg font-semibold">Novo ticket interno</h2>
-        <p className="mt-1 text-xs text-muted-foreground">Solicite ajuda urgente a outro setor.</p>
+    <Modal onClose={onClose} titleId="new-internal-ticket-title">
+      <h2 id="new-internal-ticket-title" className="text-lg font-semibold">Novo ticket interno</h2>
+      <p className="mt-1 text-xs text-muted-foreground">Solicite ajuda urgente a outro setor.</p>
 
         <div className="mt-4 grid gap-3">
           <label className="block">
@@ -320,17 +320,16 @@ function NewInternalDialog({
           </label>
         </div>
 
-        <div className="mt-5 flex justify-end gap-2">
-          <button onClick={onClose} className="rounded-md border px-4 py-2 text-sm hover:bg-muted">Cancelar</button>
-          <button
-            disabled={!valid}
-            onClick={() => onCreate(form)}
-            className="rounded-md bg-primary px-5 py-2 text-sm font-semibold text-primary-foreground disabled:opacity-50"
-          >
-            Abrir ticket
-          </button>
-        </div>
+      <div className="mt-5 flex justify-end gap-2">
+        <button onClick={onClose} className="rounded-md border px-4 py-2 text-sm hover:bg-muted">Cancelar</button>
+        <button
+          disabled={!valid}
+          onClick={() => onCreate(form)}
+          className="rounded-md bg-primary px-5 py-2 text-sm font-semibold text-primary-foreground disabled:opacity-50"
+        >
+          Abrir ticket
+        </button>
       </div>
-    </div>
+    </Modal>
   );
 }
