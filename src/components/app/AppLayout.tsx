@@ -12,6 +12,7 @@ import {
   Settings,
   Bell,
   Search,
+  X,
   LogOut,
   ChevronDown,
   Headphones,
@@ -227,14 +228,24 @@ export function AppLayout() {
 
       <main className="lg:pl-[240px]">
         <div className="sticky top-0 z-20 hidden items-center justify-between border-b bg-background/80 px-8 py-4 backdrop-blur lg:flex">
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Search className="h-4 w-4" />
+          <div className="flex w-80 items-center gap-2 text-sm text-muted-foreground">
+            <Search className="h-4 w-4 shrink-0" />
             <input
               value={globalSearchQuery}
               onChange={(e) => setGlobalSearchQuery(e.target.value)}
               placeholder="Buscar ticket, cliente, peça..."
-              className="w-80 bg-transparent outline-none placeholder:text-muted-foreground/60"
+              className="w-full bg-transparent outline-none placeholder:text-muted-foreground/60"
             />
+            {globalSearchQuery && (
+              <button
+                type="button"
+                onClick={() => setGlobalSearchQuery("")}
+                title="Limpar busca"
+                className="shrink-0 rounded p-0.5 hover:bg-muted hover:text-foreground"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
           </div>
           <div className="flex items-center gap-3" ref={userMenuRef}>
             <button className="rounded-md p-2 hover:bg-muted">
