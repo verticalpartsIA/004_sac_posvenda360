@@ -24,6 +24,14 @@ function TicketDetail() {
   const { tickets, internalTickets, storeReady, updateStatus, resolveTicket, setNps, createInternalTicket } = useStore();
   const ticket = tickets.find((t) => t.code === ro || t.id === ro);
 
+  const [resolving, setResolving] = useState(false);
+  const [rootCause, setRootCause] = useState<RootCause | "">("");
+  const [justification, setJustification] = useState("");
+  const [report, setReport] = useState("");
+  const [resolveErr, setResolveErr] = useState<string | null>(null);
+  const [resolvePhotos, setResolvePhotos] = useState<{ name: string; url: string }[]>([]);
+  const [openInternal, setOpenInternal] = useState(false);
+
   if (!storeReady) {
     return (
       <div className="flex items-center justify-center py-32">
@@ -43,14 +51,6 @@ function TicketDetail() {
 
   const sla = slaStatus(ticket);
   const isClosed = ticket.status === "concluido";
-
-  const [resolving, setResolving] = useState(false);
-  const [rootCause, setRootCause] = useState<RootCause | "">("");
-  const [justification, setJustification] = useState("");
-  const [report, setReport] = useState("");
-  const [resolveErr, setResolveErr] = useState<string | null>(null);
-  const [resolvePhotos, setResolvePhotos] = useState<{ name: string; url: string }[]>([]);
-  const [openInternal, setOpenInternal] = useState(false);
 
   function handleResolvePhotoChange(e: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files ?? []);
