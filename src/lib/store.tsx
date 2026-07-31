@@ -421,6 +421,41 @@ function mapNpsRecord(row: NpsRow): NpsRecord {
   };
 }
 
+// Pesquisa real do SAC (disparada por WhatsApp após entrega, vinculada a uma
+// NF via sac_pesquisas.token) — schema próprio, sem FK para tickets/clientes
+// do módulo de ocorrências. Mapeada pro mesmo formato de NpsRecord (só com
+// nps_score preenchendo as 3 perguntas, igual ao fallback já usado a partir
+// de ticket.nps) pra alimentar os mesmos dashboards sem duplicar lógica.
+type SacNfFields = { razao_social_cliente: string | null; nf_numero: string | null };
+type SacPesquisaRow = {
+  id: string;
+  nps_score: number | null;
+  observacoes: string | null;
+  respondida_em: string | null;
+  created_at: string;
+  // PostgREST pode devolver o embed como objeto ou array de 1 dependendo de
+  // como infere a cardinalidade do FK — trata os dois formatos.
+  sac_notas_fiscais: SacNfFields | SacNfFields[] | null;
+};
+
+function mapSacPesquisa(row: SacPesquisaRow): NpsRecord {
+  const score = row.nps_score ?? 0;
+  const nf = Array.isArray(row.sac_notas_fiscais) ? row.sac_notas_fiscais[0] ?? null : row.sac_notas_fiscais;
+  return {
+    id: `sac-pesquisa-${row.id}`,
+    customer: nf?.razao_social_cliente ?? `NF ${nf?.nf_numero ?? "?"}`,
+    customerTier: "B",
+    surveyDate: row.respondida_em ?? row.created_at,
+    q1Recomendacao: score,
+    q2Resolucao: score,
+    q3Agilidade: score,
+    category: categorizeNps(score),
+    feedback: row.observacoes ?? undefined,
+    trigger: "pos_resolucao",
+    createdAt: row.created_at,
+  };
+}
+
 interface NewTicketInput {
   customer: string;
   customerDoc?: string;
@@ -516,12 +551,17 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [globalSearchQuery, setGlobalSearchQuery] = useState("");
 
   const loadAll = useCallback(async () => {
-    const [ticketsRes, internalRes, messagesRes, auditsRes, npsRes] = await Promise.all([
+    const [ticketsRes, internalRes, messagesRes, auditsRes, npsRes, sacPesquisasRes] = await Promise.all([
       supabase.from("tickets").select("*").order("created_at", { ascending: false }),
       supabase.from("internal_tickets").select("*").order("opened_at", { ascending: false }),
       supabase.from("ticket_messages").select("*").order("created_at", { ascending: true }),
       supabase.from("audit_log").select("*").order("created_at", { ascending: true }),
       supabase.from("nps_records").select("*").order("survey_date", { ascending: false }),
+      supabase
+        .from("sac_pesquisas")
+        .select("id,nps_score,observacoes,respondida_em,created_at,sac_notas_fiscais(razao_social_cliente,nf_numero)")
+        .not("respondida_em", "is", null)
+        .order("respondida_em", { ascending: false }),
     ]);
 
     if (ticketsRes.error) console.error("[Store] Failed to load tickets", ticketsRes.error);
@@ -529,12 +569,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     if (messagesRes.error) console.error("[Store] Failed to load ticket messages", messagesRes.error);
     if (auditsRes.error) console.error("[Store] Failed to load audit log", auditsRes.error);
     if (npsRes.error) console.error("[Store] Failed to load NPS records", npsRes.error);
+    if (sacPesquisasRes.error) console.error("[Store] Failed to load SAC pesquisas", sacPesquisasRes.error);
 
     const ticketRows = ticketsRes.data ?? [];
     const internalRows = internalRes.data ?? [];
     const messageRows = messagesRes.data ?? [];
     const auditRows = auditsRes.data ?? [];
     const npsRows = npsRes.data ?? [];
+    const sacPesquisaRows = (sacPesquisasRes.data ?? []) as unknown as SacPesquisaRow[];
 
     const mappedTickets = ticketRows.map((row) =>
       mapTicket(
@@ -551,9 +593,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       ),
     );
 
+    const mergedNps = [...npsRows.map(mapNpsRecord), ...sacPesquisaRows.map(mapSacPesquisa)].sort(
+      (a, b) => new Date(b.surveyDate).getTime() - new Date(a.surveyDate).getTime(),
+    );
+
     setTickets(mappedTickets);
     setInternalTickets(mappedInternalTickets);
-    setNpsRecords(npsRows.map(mapNpsRecord));
+    setNpsRecords(mergedNps);
     setStoreReady(true);
   }, []);
 

@@ -2337,6 +2337,83 @@ async function handleSacEnviarPesquisa(req, res) {
   return json(200, { ok: true, enviado, token });
 }
 
+// GET/POST /api/sac/pesquisa — resolve e responde o token de /nps/form/$token
+// contra sac_pesquisas (a pesquisa real, disparada por WhatsApp após entrega,
+// vinculada a uma NF). Espelha src/routes/api/sac/pesquisa.ts (usado no build
+// Lovable) — este servidor Node não despacha pras API routes do TanStack
+// Start, então cada endpoint precisa da sua implementação aqui também (mesmo
+// padrão de todos os outros /api/sac/* deste arquivo).
+async function handleSacPesquisa(req, res) {
+  const json = (status, obj) => {
+    res.statusCode = status;
+    res.setHeader("Content-Type", "application/json");
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.end(JSON.stringify(obj));
+  };
+
+  if (req.method === "OPTIONS") {
+    res.statusCode = 204;
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+    return res.end();
+  }
+
+  if (req.method === "GET") {
+    const token = new URL(req.url || "/", "http://localhost").searchParams.get("token")?.trim();
+    if (!token) return json(400, { error: "token obrigatório" });
+
+    const rows = await sbFetch(
+      `/rest/v1/sac_pesquisas?token=eq.${encodeURIComponent(token)}&select=respondida_em,sac_notas_fiscais(nf_numero,razao_social_cliente)&limit=1`,
+      { method: "GET" },
+    ).then((r) => r.json()).catch(() => []);
+    const row = Array.isArray(rows) ? rows[0] : null;
+    if (!row) return json(200, { found: false });
+
+    const nf = Array.isArray(row.sac_notas_fiscais) ? row.sac_notas_fiscais[0] : row.sac_notas_fiscais;
+    return json(200, {
+      found: true,
+      jaRespondida: row.respondida_em !== null,
+      nfNumero: nf?.nf_numero ?? null,
+      clienteNome: nf?.razao_social_cliente ?? null,
+    });
+  }
+
+  if (req.method === "POST") {
+    let body;
+    try { body = JSON.parse(await readBody(req)); }
+    catch { return json(400, { error: "Invalid JSON" }); }
+
+    const token = body?.token?.trim();
+    const npsScore = body?.npsScore;
+    if (!token || typeof npsScore !== "number" || npsScore < 0 || npsScore > 10 || !Number.isInteger(npsScore)) {
+      return json(422, { error: "token e npsScore (0-10) são obrigatórios" });
+    }
+
+    // PATCH com respondida_em=is.null: só atualiza se ainda não respondida —
+    // impede reenvio/duplo submit sobrescrever a resposta original. Nenhuma
+    // linha afetada ⇒ token inválido ou já respondido.
+    const upd = await sbFetch(
+      `/rest/v1/sac_pesquisas?token=eq.${encodeURIComponent(token)}&respondida_em=is.null`,
+      {
+        method: "PATCH",
+        body: JSON.stringify({
+          nps_score: npsScore,
+          observacoes: body.observacoes?.trim() || null,
+          respondida_em: new Date().toISOString(),
+        }),
+      },
+    );
+    const updRows = await upd.json().catch(() => []);
+    if (!Array.isArray(updRows) || !updRows.length) {
+      return json(409, { ok: false, reason: "invalido_ou_ja_respondida" });
+    }
+    return json(200, { ok: true });
+  }
+
+  return json(405, { error: "Method Not Allowed" });
+}
+
 // ─── Admin — Convidar usuário ─────────────────────────────────────────────────
 // POST /api/admin/invite-user
 // Body: { "email": "...", "role": "operador|qualidade|gestor|admin" }
@@ -2912,6 +2989,10 @@ const server = http.createServer(async (req, res) => {
     }
     if (urlPath === "/api/webhooks/omie") {
       await handleOmieWebhook(req, res);
+      return;
+    }
+    if (urlPath === "/api/sac/pesquisa") {
+      await handleSacPesquisa(req, res);
       return;
     }
     if (urlPath === "/api/sac/enviar-pesquisa") {
