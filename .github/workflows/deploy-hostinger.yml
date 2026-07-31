@@ -22,6 +22,27 @@ jobs:
             cd "$SITE_DIR/nodejs"
             export PATH=/opt/alt/alt-nodejs22/root/usr/bin:$PATH
             git pull origin main
+
+            # Recria o nodejs/.env de runtime a partir dos secrets do GitHub a cada deploy.
+            # Antes disso o .env vivia só manualmente no host e some se alguém apagar/resetar
+            # o diretório — agora a fonte da verdade é o GitHub, e o app nunca fica sem chave.
+            printf 'SUPABASE_URL=%s\nVITE_SUPABASE_URL=%s\nVITE_SUPABASE_PROJECT_ID=%s\nSUPABASE_PUBLISHABLE_KEY=%s\nVITE_SUPABASE_PUBLISHABLE_KEY=%s\nSUPABASE_SERVICE_ROLE_KEY=%s\nEVOLUTION_APIKEY=%s\nANTHROPIC_API_KEY=%s\nCLAUDE_MODEL=%s\nCLAUDE_AUTO_REPLY=%s\nSTT_URL=%s\nSTT_APIKEY=%s\nERP_URL=%s\nERP_SERVICE_KEY=%s\n' \
+              'https://jkbklzlbhhfnamaeislb.supabase.co' \
+              'https://jkbklzlbhhfnamaeislb.supabase.co' \
+              'jkbklzlbhhfnamaeislb' \
+              '${{ secrets.PV360_SUPABASE_PUBLISHABLE_KEY }}' \
+              '${{ secrets.PV360_SUPABASE_PUBLISHABLE_KEY }}' \
+              '${{ secrets.PV360_SUPABASE_SERVICE_ROLE_KEY }}' \
+              '${{ secrets.PV360_EVOLUTION_APIKEY }}' \
+              '${{ secrets.PV360_ANTHROPIC_API_KEY }}' \
+              '${{ secrets.PV360_CLAUDE_MODEL }}' \
+              '${{ secrets.PV360_CLAUDE_AUTO_REPLY }}' \
+              '${{ secrets.PV360_STT_URL }}' \
+              '${{ secrets.PV360_STT_APIKEY }}' \
+              'https://kgecbycsyrtdhmdziuul.supabase.co' \
+              '${{ secrets.PV360_ERP_SERVICE_KEY }}' > .env
+            chmod 600 .env
+
             set -a && . "$SITE_DIR/public_html/.builds/config/.env" && set +a
             npm ci
             NODE_OPTIONS=--max-old-space-size=2048 RAYON_NUM_THREADS=2 UV_THREADPOOL_SIZE=2 npm run build
