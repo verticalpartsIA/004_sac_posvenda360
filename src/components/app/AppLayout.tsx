@@ -17,6 +17,7 @@ import {
   ChevronDown,
   Headphones,
   History,
+  PackageX,
 } from "lucide-react";
 import { Logo } from "./Logo";
 import { cn } from "@/lib/utils";
@@ -60,7 +61,10 @@ const groups: NavGroup[] = [
   },
   {
     title: "SAC",
-    items: [{ to: "/sac", label: "SAC", icon: Headphones }],
+    items: [
+      { to: "/sac", label: "SAC", icon: Headphones },
+      { to: "/sac/devolucoes", label: "Devoluções", icon: PackageX },
+    ],
   },
   {
     title: "Comunicação",

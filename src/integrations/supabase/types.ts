@@ -623,6 +623,102 @@ export type Database = {
         }
         Relationships: []
       }
+      sac_devolucoes: {
+        Row: {
+          aberta_em: string
+          aberta_por: string | null
+          cancelada_em: string | null
+          cancelada_por: string | null
+          concluida_em: string | null
+          concluida_por: string | null
+          condicao_recebimento: Database["public"]["Enums"]["devolucao_condicao"] | null
+          created_at: string | null
+          fotos: Json | null
+          id: string
+          motivo: string
+          motivo_cancelamento: string | null
+          nf_id: string
+          observacoes_abertura: string | null
+          observacoes_conclusao: string | null
+          observacoes_recebimento: string | null
+          quantidade_recebida: number | null
+          recebida_em: string | null
+          recebida_por: string | null
+          status: Database["public"]["Enums"]["devolucao_status"]
+          ticket_id: string | null
+          updated_at: string | null
+          valor_estimado: number | null
+          valor_prejuizo_final: number | null
+        }
+        Insert: {
+          aberta_em?: string
+          aberta_por?: string | null
+          cancelada_em?: string | null
+          cancelada_por?: string | null
+          concluida_em?: string | null
+          concluida_por?: string | null
+          condicao_recebimento?: Database["public"]["Enums"]["devolucao_condicao"] | null
+          created_at?: string | null
+          fotos?: Json | null
+          id?: string
+          motivo: string
+          motivo_cancelamento?: string | null
+          nf_id: string
+          observacoes_abertura?: string | null
+          observacoes_conclusao?: string | null
+          observacoes_recebimento?: string | null
+          quantidade_recebida?: number | null
+          recebida_em?: string | null
+          recebida_por?: string | null
+          status?: Database["public"]["Enums"]["devolucao_status"]
+          ticket_id?: string | null
+          updated_at?: string | null
+          valor_estimado?: number | null
+          valor_prejuizo_final?: number | null
+        }
+        Update: {
+          aberta_em?: string
+          aberta_por?: string | null
+          cancelada_em?: string | null
+          cancelada_por?: string | null
+          concluida_em?: string | null
+          concluida_por?: string | null
+          condicao_recebimento?: Database["public"]["Enums"]["devolucao_condicao"] | null
+          created_at?: string | null
+          fotos?: Json | null
+          id?: string
+          motivo?: string
+          motivo_cancelamento?: string | null
+          nf_id?: string
+          observacoes_abertura?: string | null
+          observacoes_conclusao?: string | null
+          observacoes_recebimento?: string | null
+          quantidade_recebida?: number | null
+          recebida_em?: string | null
+          recebida_por?: string | null
+          status?: Database["public"]["Enums"]["devolucao_status"]
+          ticket_id?: string | null
+          updated_at?: string | null
+          valor_estimado?: number | null
+          valor_prejuizo_final?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sac_devolucoes_nf_id_fkey"
+            columns: ["nf_id"]
+            isOneToOne: false
+            referencedRelation: "sac_notas_fiscais"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sac_devolucoes_ticket_id_fkey"
+            columns: ["ticket_id"]
+            isOneToOne: false
+            referencedRelation: "tickets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       sac_logs_comunicacao: {
         Row: {
           canal: string
@@ -1256,6 +1352,8 @@ export type Database = {
         | "devolver_fornecedor"
         | "outro"
       customer_tier: "A" | "B" | "C"
+      devolucao_condicao: "perfeita" | "avariada" | "incompleta"
+      devolucao_status: "aberta" | "recebida" | "concluida" | "cancelada"
       internal_dept:
         | "comercial"
         | "expedicao"
@@ -1438,6 +1536,8 @@ export const Constants = {
         "outro",
       ],
       customer_tier: ["A", "B", "C"],
+      devolucao_condicao: ["perfeita", "avariada", "incompleta"],
+      devolucao_status: ["aberta", "recebida", "concluida", "cancelada"],
       internal_dept: [
         "comercial",
         "expedicao",

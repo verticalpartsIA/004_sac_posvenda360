@@ -26,6 +26,7 @@ import { Route as AppClientesRouteImport } from './routes/_app/clientes'
 import { Route as AppSacIndexRouteImport } from './routes/_app/sac/index'
 import { Route as NpsFormTokenRouteImport } from './routes/nps.form.$token'
 import { Route as AppThreadIdRouteImport } from './routes/_app/thread.$id'
+import { Route as AppSacDevolucoesRouteImport } from './routes/_app/sac/devolucoes'
 import { Route as AppSacNfRouteImport } from './routes/_app/sac/$nf'
 import { Route as AppProdutoCodigoRouteImport } from './routes/_app/produto.$codigo'
 import { Route as AppOcorrenciaRoRouteImport } from './routes/_app/ocorrencia.$ro'
@@ -128,6 +129,11 @@ const NpsFormTokenRoute = NpsFormTokenRouteImport.update({
 const AppThreadIdRoute = AppThreadIdRouteImport.update({
   id: '/thread/$id',
   path: '/thread/$id',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppSacDevolucoesRoute = AppSacDevolucoesRouteImport.update({
+  id: '/sac/devolucoes',
+  path: '/sac/devolucoes',
   getParentRoute: () => AppRoute,
 } as any)
 const AppSacNfRoute = AppSacNfRouteImport.update({
@@ -260,6 +266,7 @@ export interface FileRoutesByFullPath {
   '/ocorrencia/$ro': typeof AppOcorrenciaRoRouteWithChildren
   '/produto/$codigo': typeof AppProdutoCodigoRoute
   '/sac/$nf': typeof AppSacNfRoute
+  '/sac/devolucoes': typeof AppSacDevolucoesRoute
   '/thread/$id': typeof AppThreadIdRoute
   '/nps/form/$token': typeof NpsFormTokenRoute
   '/sac/': typeof AppSacIndexRoute
@@ -297,6 +304,7 @@ export interface FileRoutesByTo {
   '/ocorrencia/$ro': typeof AppOcorrenciaRoRouteWithChildren
   '/produto/$codigo': typeof AppProdutoCodigoRoute
   '/sac/$nf': typeof AppSacNfRoute
+  '/sac/devolucoes': typeof AppSacDevolucoesRoute
   '/thread/$id': typeof AppThreadIdRoute
   '/nps/form/$token': typeof NpsFormTokenRoute
   '/sac': typeof AppSacIndexRoute
@@ -336,6 +344,7 @@ export interface FileRoutesById {
   '/_app/ocorrencia/$ro': typeof AppOcorrenciaRoRouteWithChildren
   '/_app/produto/$codigo': typeof AppProdutoCodigoRoute
   '/_app/sac/$nf': typeof AppSacNfRoute
+  '/_app/sac/devolucoes': typeof AppSacDevolucoesRoute
   '/_app/thread/$id': typeof AppThreadIdRoute
   '/nps/form/$token': typeof NpsFormTokenRoute
   '/_app/sac/': typeof AppSacIndexRoute
@@ -375,6 +384,7 @@ export interface FileRouteTypes {
     | '/ocorrencia/$ro'
     | '/produto/$codigo'
     | '/sac/$nf'
+    | '/sac/devolucoes'
     | '/thread/$id'
     | '/nps/form/$token'
     | '/sac/'
@@ -412,6 +422,7 @@ export interface FileRouteTypes {
     | '/ocorrencia/$ro'
     | '/produto/$codigo'
     | '/sac/$nf'
+    | '/sac/devolucoes'
     | '/thread/$id'
     | '/nps/form/$token'
     | '/sac'
@@ -450,6 +461,7 @@ export interface FileRouteTypes {
     | '/_app/ocorrencia/$ro'
     | '/_app/produto/$codigo'
     | '/_app/sac/$nf'
+    | '/_app/sac/devolucoes'
     | '/_app/thread/$id'
     | '/nps/form/$token'
     | '/_app/sac/'
@@ -586,6 +598,13 @@ declare module '@tanstack/react-router' {
       path: '/thread/$id'
       fullPath: '/thread/$id'
       preLoaderRoute: typeof AppThreadIdRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/sac/devolucoes': {
+      id: '/_app/sac/devolucoes'
+      path: '/sac/devolucoes'
+      fullPath: '/sac/devolucoes'
+      preLoaderRoute: typeof AppSacDevolucoesRouteImport
       parentRoute: typeof AppRoute
     }
     '/_app/sac/$nf': {
@@ -774,6 +793,7 @@ interface AppRouteChildren {
   AppOcorrenciaRoRoute: typeof AppOcorrenciaRoRouteWithChildren
   AppProdutoCodigoRoute: typeof AppProdutoCodigoRoute
   AppSacNfRoute: typeof AppSacNfRoute
+  AppSacDevolucoesRoute: typeof AppSacDevolucoesRoute
   AppThreadIdRoute: typeof AppThreadIdRoute
   AppSacIndexRoute: typeof AppSacIndexRoute
 }
@@ -804,6 +824,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppOcorrenciaRoRoute: AppOcorrenciaRoRouteWithChildren,
   AppProdutoCodigoRoute: AppProdutoCodigoRoute,
   AppSacNfRoute: AppSacNfRoute,
+  AppSacDevolucoesRoute: AppSacDevolucoesRoute,
   AppThreadIdRoute: AppThreadIdRoute,
   AppSacIndexRoute: AppSacIndexRoute,
 }
