@@ -17,16 +17,19 @@ function getSb() {
 
 export const APIRoute = createAPIFileRoute("/api/whatsapp/start")({
   POST: async ({ request }) => {
-    let body: { phone: string; text: string; customerName?: string };
+    let body: { phone: string; text: string; customerName?: string; reason?: string };
     try {
       body = await request.json();
     } catch {
       return Response.json({ error: "Bad Request" }, { status: 400 });
     }
 
-    const { phone: rawPhone, text, customerName } = body ?? {};
+    const { phone: rawPhone, text, customerName, reason } = body ?? {};
     if (!rawPhone || !text?.trim()) {
       return Response.json({ error: "phone e text sao obrigatorios" }, { status: 422 });
+    }
+    if (!reason?.trim()) {
+      return Response.json({ error: "reason (titulo da ocorrencia) e obrigatorio" }, { status: 422 });
     }
 
     let phone = rawPhone.replace(/\D/g, "");
@@ -71,7 +74,7 @@ export const APIRoute = createAPIFileRoute("/api/whatsapp/start")({
         customer,
         part: "A definir",
         part_code: "WA",
-        reason: "Contato iniciado pela plataforma",
+        reason: reason.trim(),
         occurrence_reason: "outro",
         channel: "whatsapp",
         whatsapp_thread_id: remoteJid,

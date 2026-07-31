@@ -86,6 +86,7 @@ function NovaConversaModal({
   onClose: () => void;
   onSuccess: (remoteJid: string) => void;
 }) {
+  const [titulo, setTitulo] = useState("");
   const [phone, setPhone] = useState("");
   const [name, setName] = useState("");
   const [msg, setMsg] = useState("");
@@ -94,14 +95,19 @@ function NovaConversaModal({
 
   async function submit() {
     const cleanPhone = phone.replace(/\D/g, "");
-    if (!cleanPhone || !msg.trim()) return;
+    if (!titulo.trim() || !cleanPhone || !msg.trim()) return;
     setBusy(true);
     setError(null);
     try {
       const r = await fetch("/api/whatsapp/start", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone: cleanPhone, text: msg.trim(), customerName: name.trim() || undefined }),
+        body: JSON.stringify({
+          phone: cleanPhone,
+          text: msg.trim(),
+          customerName: name.trim() || undefined,
+          reason: titulo.trim(),
+        }),
       });
       if (!r.ok) {
         const e = await r.json().catch(() => ({}));
@@ -126,8 +132,8 @@ function NovaConversaModal({
       onKeyDown={handleKey}
     >
       <div className="w-full max-w-md rounded-xl border bg-card p-6 shadow-2xl mx-4">
-        <div className="flex items-center justify-between mb-5">
-          <h2 className="text-lg font-semibold">Nova conversa</h2>
+        <div className="flex items-center justify-between mb-1">
+          <h2 className="text-lg font-semibold">Criar ticket e iniciar conversa</h2>
           <button
             onClick={onClose}
             className="rounded-lg p-1.5 text-muted-foreground hover:bg-muted"
@@ -135,8 +141,22 @@ function NovaConversaModal({
             <X className="h-4 w-4" />
           </button>
         </div>
+        <p className="mb-5 text-xs text-muted-foreground">
+          Um ticket é aberto junto com a conversa, para acompanhar essa ocorrência no SAC.
+        </p>
 
         <div className="space-y-4">
+          <div>
+            <label className="text-sm font-medium">Título da ocorrência *</label>
+            <input
+              className="mt-1 w-full rounded-lg border bg-muted/40 px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ring placeholder:text-muted-foreground"
+              placeholder="Ex: Peça com avaria no transporte"
+              value={titulo}
+              onChange={(e) => setTitulo(e.target.value)}
+              autoFocus
+            />
+          </div>
+
           <div>
             <label className="text-sm font-medium">Numero WhatsApp *</label>
             <input
@@ -144,7 +164,6 @@ function NovaConversaModal({
               placeholder="5511999999999 (DDI + DDD + numero)"
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
-              autoFocus
             />
             <p className="mt-1 text-[11px] text-muted-foreground">
               Inclua o codigo do pais (55 para Brasil) e DDD, sem espacos ou tracos.
@@ -187,10 +206,10 @@ function NovaConversaModal({
             </button>
             <button
               onClick={submit}
-              disabled={!phone.trim() || !msg.trim() || busy}
+              disabled={!titulo.trim() || !phone.trim() || !msg.trim() || busy}
               className={cn(
                 "flex-1 inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium text-white transition-colors",
-                phone.trim() && msg.trim() && !busy
+                titulo.trim() && phone.trim() && msg.trim() && !busy
                   ? "bg-emerald-600 hover:bg-emerald-700"
                   : "bg-muted text-muted-foreground cursor-not-allowed",
               )}
@@ -200,7 +219,7 @@ function NovaConversaModal({
               ) : (
                 <Send className="h-4 w-4" />
               )}
-              {busy ? "Enviando..." : "Iniciar conversa"}
+              {busy ? "Enviando..." : "Criar ticket e enviar"}
             </button>
           </div>
         </div>
@@ -391,7 +410,7 @@ function WhatsappThreads() {
             onClick={() => setShowModal(true)}
             className="inline-flex items-center gap-2 rounded-md bg-emerald-600 px-3 py-2 text-sm text-white hover:bg-emerald-700 transition-colors"
           >
-            <Plus className="h-3.5 w-3.5" /> Nova conversa
+            <Plus className="h-3.5 w-3.5" /> Criar ticket e iniciar conversa
           </button>
           <button
             onClick={load}
@@ -441,7 +460,7 @@ function WhatsappThreads() {
             onClick={() => setShowModal(true)}
             className="mt-4 inline-flex items-center gap-2 rounded-md bg-emerald-600 px-4 py-2 text-sm text-white hover:bg-emerald-700 transition-colors"
           >
-            <Plus className="h-3.5 w-3.5" /> Iniciar conversa
+            <Plus className="h-3.5 w-3.5" /> Criar ticket e iniciar conversa
           </button>
         </div>
       ) : (
