@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState, useEffect } from "react";
 import { useStore, slaStatus } from "@/lib/store";
+import { supabase } from "@/integrations/supabase/client";
 import { BackToDashboard } from "@/components/app/BackToDashboard";
 import {
   ROOT_CAUSE_LABEL,
@@ -22,6 +23,7 @@ import {
   Download,
   FileSpreadsheet,
   FileText,
+  PackageX,
 } from "lucide-react";
 
 export const Route = createFileRoute("/_app/gestor/kpis")({ component: ManagerDashboard });
@@ -57,6 +59,35 @@ function ManagerDashboard() {
   useEffect(() => setMounted(true), []);
 
   const cutoff = mounted ? Date.now() - PERIOD_HOURS[period] * 3600 * 1000 : 0;
+
+  // ===== Devoluções (Omie) — prejuízo direto, indicador crítico =====
+  // Fonte diferente das demais KPIs (que vêm de `tickets`, o módulo de
+  // ocorrências): devolvido/devolvido_parcial vêm do ERP via sync-faturamento
+  // e vivem em sac_notas_fiscais (o módulo SAC/NF), não em `tickets`.
+  const [devolucaoNfs, setDevolucaoNfs] = useState<
+    { valor_total: number | null; devolvido: boolean | null; devolvido_parcial: boolean | null; data_emissao: string | null }[]
+  >([]);
+  useEffect(() => {
+    supabase
+      .from("sac_notas_fiscais")
+      .select("valor_total,devolvido,devolvido_parcial,data_emissao")
+      .or("devolvido.eq.true,devolvido_parcial.eq.true")
+      .then(({ data, error }) => {
+        if (error) { console.error("[KPIs] Falha ao carregar devoluções", error); return; }
+        setDevolucaoNfs(data ?? []);
+      });
+  }, []);
+  const devolucoesNoPeriodo = useMemo(
+    () =>
+      devolucaoNfs.filter(
+        (nf) => !mounted || !nf.data_emissao || new Date(nf.data_emissao).getTime() >= cutoff,
+      ),
+    [devolucaoNfs, cutoff, mounted],
+  );
+  const devolucaoValor = devolucoesNoPeriodo.reduce((s, nf) => s + (nf.valor_total ?? 0), 0);
+  const devolucaoTotalCount = devolucoesNoPeriodo.filter((nf) => nf.devolvido).length;
+  const devolucaoParcialCount = devolucoesNoPeriodo.filter((nf) => nf.devolvido_parcial && !nf.devolvido).length;
+
   const ticketsInPeriod = useMemo(
     () =>
       mounted
@@ -179,6 +210,7 @@ function ManagerDashboard() {
   function exportCsv() {
     const rows = [
       ["KPI", "Valor", "Meta", "Status"],
+      ["Prejuízo em devoluções (R$)", devolucaoValor.toFixed(2), "Reduzir", `${devolucoesNoPeriodo.length} NF(s)`],
       ["NPS Score", String(npsScore), `≥ ${META.nps}`, npsScore >= META.nps ? "OK" : "Abaixo"],
       ["SLA Compliance (%)", slaCompliance.toFixed(1), `≥ ${META.sla}%`, slaCompliance >= META.sla ? "OK" : "Abaixo"],
       ["MTTR (h)", mttr.toFixed(1), `< ${META.mttr}h`, mttr < META.mttr ? "OK" : "Acima"],
@@ -230,6 +262,29 @@ function ManagerDashboard() {
           <button onClick={exportPdf} className="inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm font-medium hover:bg-muted">
             <FileText className="h-4 w-4" /> PDF
           </button>
+        </div>
+      </div>
+
+      {/* Devoluções — prejuízo direto. Fonte: Omie (via sync-faturamento), não `tickets`. */}
+      <div className="rounded-xl border-2 border-destructive/40 bg-destructive/5 p-6 shadow-[var(--shadow-elegant)]">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-destructive/15">
+              <PackageX className="h-5 w-5 text-destructive" />
+            </div>
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-destructive">Prejuízo em devoluções</p>
+              <p className="text-3xl font-bold tracking-tight text-destructive">{brl(devolucaoValor)}</p>
+            </div>
+          </div>
+          <div className="text-right text-xs text-muted-foreground">
+            <p>
+              <strong className="text-foreground">{devolucoesNoPeriodo.length}</strong> NF(s) devolvida(s) no período
+              {devolucaoTotalCount > 0 && ` · ${devolucaoTotalCount} total`}
+              {devolucaoParcialCount > 0 && ` · ${devolucaoParcialCount} parcial`}
+            </p>
+            <p className="mt-0.5">Fonte: status de devolução do Omie por pedido</p>
+          </div>
         </div>
       </div>
 

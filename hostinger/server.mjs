@@ -2701,6 +2701,10 @@ async function handleSyncFaturamento(req, res) {
         dFatBR: info.dFat || null,
         numeroPedidoReal: p?.cabecalho?.numero_pedido ? String(p.cabecalho.numero_pedido) : null,
         codigoPedidoReal: p?.cabecalho?.codigo_pedido ? Number(p.cabecalho.codigo_pedido) : null,
+        // Devolução — o Omie já marca isso por pedido; capturado de graça
+        // (mesma chamada que já checa faturamento, sem request extra).
+        devolvido: info.devolvido === "S",
+        devolvidoParcial: info.devolvido_parcial === "S",
       };
     }
     if (codigoInterno) {
@@ -2741,6 +2745,8 @@ async function handleSyncFaturamento(req, res) {
           const patch = {
             faturado: ped.faturado || !!nf.chave_nfe,
             data_faturamento: ped.dataFat || undefined,
+            devolvido: ped.devolvido,
+            devolvido_parcial: ped.devolvidoParcial,
             updated_at: new Date().toISOString(),
           };
           // Corrige a coluna Pedido com o número visível real

@@ -719,6 +719,8 @@ export type Database = {
           data_entrega_real: string | null
           data_faturamento: string | null
           data_pos_venda: string | null
+          devolvido: boolean | null
+          devolvido_parcial: boolean | null
           faturado: boolean | null
           id: string
           nf_numero: string
@@ -754,6 +756,8 @@ export type Database = {
           data_entrega_real?: string | null
           data_faturamento?: string | null
           data_pos_venda?: string | null
+          devolvido?: boolean | null
+          devolvido_parcial?: boolean | null
           faturado?: boolean | null
           id?: string
           nf_numero: string
@@ -789,6 +793,8 @@ export type Database = {
           data_entrega_real?: string | null
           data_faturamento?: string | null
           data_pos_venda?: string | null
+          devolvido?: boolean | null
+          devolvido_parcial?: boolean | null
           faturado?: boolean | null
           id?: string
           nf_numero?: string
