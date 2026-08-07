@@ -1,3 +1,12 @@
+// ⚠️ NÃO é isto que roda em produção. O runtime real é o Node puro em
+// hostinger/server.mjs (script "start"), que tem sua própria função
+// handleSyncFaturamento — mais completa (também corrige numero_pedido_omie/
+// nf_numero/chave_nfe e captura devolvido/devolvido_parcial do Omie, ver
+// migração 20260731000001_sac_nf_devolucao.sql) — e é ela quem
+// efetivamente responde POST /api/sac/sync-faturamento. Este arquivo só é
+// espelho/referência de build da rota TanStack; edite a lógica de verdade
+// em server.mjs. Mesmo assim, mantido com o mesmo throttle por
+// fat_checado_em pra não divergir mais do que já diverge.
 import { createAPIFileRoute } from "@tanstack/react-start/api";
 import { createClient } from "@supabase/supabase-js";
 
@@ -42,17 +51,24 @@ async function consultarFaturamento(codigoPedido: number): Promise<{ faturado: b
 
 export const APIRoute = createAPIFileRoute("/api/sac/sync-faturamento")({
   POST: async () => {
-    // Só quem ainda não foi confirmado como faturado precisa ser reconsultado
-    // no Omie — uma vez faturado=true isso não volta atrás. Sem esse filtro,
-    // toda carga da tela de SAC reconsultava TODAS as NFs (inclusive as 100%
-    // já faturadas), o que passou a demorar mais de 1 minuto (timeout).
-    const { data: nfs, error } = await sb
+    // Throttle: quem já está faturado e foi checado há menos de 6h não é
+    // reconsultado agora — evita bater no Omie pra todo mundo em toda carga
+    // da tela. Quem ainda não foi confirmado como faturado é sempre checado.
+    const THROTTLE_MS = 6 * 60 * 60 * 1000;
+    const { data: todas, error } = await sb
       .from("sac_notas_fiscais")
-      .select("id, codigo_pedido_omie")
-      .not("codigo_pedido_omie", "is", null)
-      .or("faturado.is.null,faturado.eq.false");
+      .select("id, codigo_pedido_omie, faturado, fat_checado_em")
+      .not("codigo_pedido_omie", "is", null);
 
-    if (error || !nfs?.length) return Response.json({ ok: true, atualizados: 0 });
+    if (error || !todas?.length) return Response.json({ ok: true, atualizados: 0 });
+
+    const agora = Date.now();
+    const nfs = todas.filter((nf) => {
+      if (!nf.faturado) return true;
+      if (!nf.fat_checado_em) return true;
+      return agora - new Date(nf.fat_checado_em as string).getTime() > THROTTLE_MS;
+    });
+    if (!nfs.length) return Response.json({ ok: true, atualizados: 0, adiadas: todas.length });
 
     let atualizados = 0;
     const erros: string[] = [];
@@ -69,10 +85,14 @@ export const APIRoute = createAPIFileRoute("/api/sac/sync-faturamento")({
           await sb.from("sac_notas_fiscais").update({
             faturado,
             data_faturamento: dataFat,
+            fat_checado_em: new Date().toISOString(),
             updated_at: new Date().toISOString(),
           } as any).eq("id", nf.id);
           atualizados++;
         } catch (err) {
+          await sb.from("sac_notas_fiscais").update({
+            fat_checado_em: new Date().toISOString(),
+          } as any).eq("id", nf.id);
           erros.push(`pedido ${codigo}: ${(err as Error).message}`);
         }
       }));
@@ -80,6 +100,6 @@ export const APIRoute = createAPIFileRoute("/api/sac/sync-faturamento")({
       if (i + LOTE < nfs.length) await new Promise((r) => setTimeout(r, 200));
     }
 
-    return Response.json({ ok: true, atualizados, erros: erros.length ? erros : undefined });
+    return Response.json({ ok: true, atualizados, adiadas: todas.length - nfs.length, erros: erros.length ? erros : undefined });
   },
 });
