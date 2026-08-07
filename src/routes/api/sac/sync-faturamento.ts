@@ -42,10 +42,15 @@ async function consultarFaturamento(codigoPedido: number): Promise<{ faturado: b
 
 export const APIRoute = createAPIFileRoute("/api/sac/sync-faturamento")({
   POST: async () => {
+    // Só quem ainda não foi confirmado como faturado precisa ser reconsultado
+    // no Omie — uma vez faturado=true isso não volta atrás. Sem esse filtro,
+    // toda carga da tela de SAC reconsultava TODAS as NFs (inclusive as 100%
+    // já faturadas), o que passou a demorar mais de 1 minuto (timeout).
     const { data: nfs, error } = await sb
       .from("sac_notas_fiscais")
       .select("id, codigo_pedido_omie")
-      .not("codigo_pedido_omie", "is", null);
+      .not("codigo_pedido_omie", "is", null)
+      .or("faturado.is.null,faturado.eq.false");
 
     if (error || !nfs?.length) return Response.json({ ok: true, atualizados: 0 });
 

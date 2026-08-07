@@ -63,6 +63,7 @@ const groups: NavGroup[] = [
     title: "SAC",
     items: [
       { to: "/sac", label: "SAC", icon: Headphones },
+      { to: "/sac/concluidos", label: "SAC Concluídos", icon: History },
       { to: "/sac/devolucoes", label: "Devoluções", icon: PackageX },
     ],
   },
