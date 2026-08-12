@@ -1,6 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import * as devolucoesRepo from "@/lib/repositories/devolucoesRepo";
+import * as conferenciaStorageRepo from "@/lib/repositories/conferenciaStorageRepo";
 import { useAuth } from "@/lib/auth";
 import { cn } from "@/lib/utils";
 import {
@@ -67,16 +68,7 @@ function DevolucoesPage() {
 
   async function carregar() {
     setLoading(true);
-    const { data, error } = await supabase
-      .from("sac_devolucoes")
-      .select(
-        "id,nf_id,motivo,status,valor_estimado,observacoes_abertura,aberta_em,aberta_por," +
-          "recebida_em,recebida_por,quantidade_recebida,condicao_recebimento,fotos,observacoes_recebimento," +
-          "concluida_em,valor_prejuizo_final,observacoes_conclusao," +
-          "sac_notas_fiscais(nf_numero,numero_pedido_omie,razao_social_cliente)",
-      )
-      .order("aberta_em", { ascending: false })
-      .limit(300);
+    const { data, error } = await devolucoesRepo.listAll();
     if (error) console.error("[devolucoes] load error:", error.message);
     setRows((data as unknown as DevolucaoRow[]) ?? []);
     setLoading(false);
@@ -94,10 +86,12 @@ function DevolucoesPage() {
   async function cancelar(id: string) {
     if (!confirm("Cancelar esta devolução? Isso não pode ser desfeito.")) return;
     const motivo = prompt("Motivo do cancelamento (opcional):") ?? null;
-    const { error } = await supabase
-      .from("sac_devolucoes")
-      .update({ status: "cancelada", cancelada_em: new Date().toISOString(), cancelada_por: user?.email ?? null, motivo_cancelamento: motivo })
-      .eq("id", id);
+    const { error } = await devolucoesRepo.update(id, {
+      status: "cancelada",
+      cancelada_em: new Date().toISOString(),
+      cancelada_por: user?.email ?? null,
+      motivo_cancelamento: motivo,
+    });
     if (error) { console.error("[devolucoes] cancelar error:", error.message); return; }
     void carregar();
   }
@@ -222,29 +216,20 @@ function DevolucoesPage() {
         <ReceberModal
           onClose={() => setRecebendoId(null)}
           onSave={async (vals) => {
-            const path = `devolucao/${recebendoId}`;
             const fotos: string[] = [];
             for (const file of vals.fotos) {
-              const ext = file.name.split(".").pop() ?? "jpg";
-              const filePath = `${path}/${Date.now()}-${fotos.length}.${ext}`;
-              const { error: upErr } = await supabase.storage.from("sac-conferencia").upload(filePath, file, { upsert: true });
-              if (!upErr) {
-                const { data } = supabase.storage.from("sac-conferencia").getPublicUrl(filePath);
-                fotos.push(data.publicUrl);
-              }
+              const { publicUrl } = await conferenciaStorageRepo.uploadFotoDevolucao(recebendoId, fotos.length, file);
+              if (publicUrl) fotos.push(publicUrl);
             }
-            const { error } = await supabase
-              .from("sac_devolucoes")
-              .update({
-                status: "recebida",
-                recebida_em: new Date().toISOString(),
-                recebida_por: user?.email ?? null,
-                quantidade_recebida: vals.quantidade,
-                condicao_recebimento: vals.condicao,
-                observacoes_recebimento: vals.observacoes || null,
-                fotos: fotos.length ? fotos : null,
-              })
-              .eq("id", recebendoId);
+            const { error } = await devolucoesRepo.update(recebendoId, {
+              status: "recebida",
+              recebida_em: new Date().toISOString(),
+              recebida_por: user?.email ?? null,
+              quantidade_recebida: vals.quantidade,
+              condicao_recebimento: vals.condicao,
+              observacoes_recebimento: vals.observacoes || null,
+              fotos: fotos.length ? fotos : null,
+            });
             if (error) { console.error("[devolucoes] receber error:", error.message); return; }
             setRecebendoId(null);
             void carregar();
@@ -257,16 +242,13 @@ function DevolucoesPage() {
           valorSugerido={rows.find((r) => r.id === concluindoId)?.valor_estimado ?? 0}
           onClose={() => setConcluindoId(null)}
           onSave={async (vals) => {
-            const { error } = await supabase
-              .from("sac_devolucoes")
-              .update({
-                status: "concluida",
-                concluida_em: new Date().toISOString(),
-                concluida_por: user?.email ?? null,
-                valor_prejuizo_final: vals.valorFinal,
-                observacoes_conclusao: vals.observacoes || null,
-              })
-              .eq("id", concluindoId);
+            const { error } = await devolucoesRepo.update(concluindoId, {
+              status: "concluida",
+              concluida_em: new Date().toISOString(),
+              concluida_por: user?.email ?? null,
+              valor_prejuizo_final: vals.valorFinal,
+              observacoes_conclusao: vals.observacoes || null,
+            });
             if (error) { console.error("[devolucoes] concluir error:", error.message); return; }
             setConcluindoId(null);
             void carregar();

@@ -2,7 +2,8 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { BackToDashboard } from "@/components/app/BackToDashboard";
 import { Plus, Shield, Trash2, RefreshCw, AlertCircle } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
+import * as userRolesRepo from "@/lib/repositories/userRolesRepo";
+import * as profilesRepo from "@/lib/repositories/profilesRepo";
 
 type Role = "operador" | "qualidade" | "gestor" | "admin";
 const ROLE_LABEL: Record<Role, string> = {
@@ -38,8 +39,8 @@ function UsuariosPage() {
     setError(null);
 
     const [rolesRes, profilesRes] = await Promise.all([
-      supabase.from("user_roles").select("user_id, role").order("user_id"),
-      supabase.from("profiles").select("user_id, display_name, departamento"),
+      userRolesRepo.listAll(),
+      profilesRepo.listAll(),
     ]);
 
     if (rolesRes.error) {
@@ -91,16 +92,10 @@ function UsuariosPage() {
     );
 
     if (hasRole) {
-      const { error: err } = await supabase
-        .from("user_roles")
-        .delete()
-        .eq("user_id", userId)
-        .eq("role", role);
+      const { error: err } = await userRolesRepo.remove(userId, role);
       if (err) { setError("Erro ao remover papel."); void load(); }
     } else {
-      const { error: err } = await supabase
-        .from("user_roles")
-        .insert({ user_id: userId, role });
+      const { error: err } = await userRolesRepo.add({ user_id: userId, role });
       if (err) { setError("Erro ao adicionar papel."); void load(); }
     }
   }

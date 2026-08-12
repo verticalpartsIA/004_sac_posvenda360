@@ -15,3 +15,13 @@ export async function uploadFotoItem(nfId: string, itemIdx: number, file: File) 
   const { data } = supabase.storage.from(BUCKET).getPublicUrl(path);
   return { error: null, publicUrl: data.publicUrl };
 }
+
+/** Sobe a foto de recebimento de uma devolução e já resolve a URL pública. */
+export async function uploadFotoDevolucao(devolucaoId: string, index: number, file: File) {
+  const ext = file.name.split(".").pop() ?? "jpg";
+  const path = `devolucao/${devolucaoId}/${Date.now()}-${index}.${ext}`;
+  const { error } = await supabase.storage.from(BUCKET).upload(path, file, { upsert: true });
+  if (error) return { error, publicUrl: null };
+  const { data } = supabase.storage.from(BUCKET).getPublicUrl(path);
+  return { error: null, publicUrl: data.publicUrl };
+}
