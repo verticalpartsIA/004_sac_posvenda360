@@ -1,6 +1,6 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import * as whatsappMessagesRepo from "@/lib/repositories/whatsappMessagesRepo";
 import type { Database } from "@/integrations/supabase/types";
 import { useAuth } from "@/lib/auth";
 import { cn } from "@/lib/utils";
@@ -286,11 +286,7 @@ function WhatsappThreads() {
   const msgsRef = useRef<WaMsg[]>([]);
 
   async function load() {
-    const { data, error } = await supabase
-      .from("whatsapp_messages")
-      .select("id,remote_jid,push_name,body,from_me,ticket_id,created_at,instance,message_id,media_type,media_url,raw")
-      .order("created_at", { ascending: false })
-      .limit(500);
+    const { data, error } = await whatsappMessagesRepo.listRecent(500);
 
     if (error) {
       console.error("[threads] load error:", error.message);
@@ -308,23 +304,19 @@ function WhatsappThreads() {
     load();
 
     // Realtime: qualquer INSERT na tabela atualiza a lista instantaneamente
-    const channel = supabase
-      .channel("wa-threads-realtime")
-      .on<WaMsg>(
-        "postgres_changes",
-        { event: "INSERT", schema: "public", table: "whatsapp_messages" },
-        (payload) => {
-          setOnline(true);
-          msgsRef.current = [payload.new, ...msgsRef.current].slice(0, 500);
-          setThreads(toThreads(msgsRef.current));
-        },
-      )
-      .subscribe((status) => {
+    const unsubscribe = whatsappMessagesRepo.subscribeToAllNewMessages(
+      (novaMsg) => {
+        setOnline(true);
+        msgsRef.current = [novaMsg, ...msgsRef.current].slice(0, 500);
+        setThreads(toThreads(msgsRef.current));
+      },
+      (status) => {
         if (status === "SUBSCRIBED") setOnline(true);
         if (status === "CLOSED" || status === "CHANNEL_ERROR") setOnline(false);
-      });
+      },
+    );
 
-    return () => { supabase.removeChannel(channel); };
+    return unsubscribe;
   }, []);
 
   const filtered = threads.filter((t) => {
@@ -364,7 +356,7 @@ function WhatsappThreads() {
   async function confirmDelete() {
     setDeleting(true);
     const jids = Array.from(selected);
-    const { error } = await supabase.from("whatsapp_messages").delete().in("remote_jid", jids);
+    const { error } = await whatsappMessagesRepo.deleteByRemoteJids(jids);
     setDeleting(false);
     setConfirmingDelete(false);
     if (error) {

@@ -24,6 +24,14 @@ type AuthCtx = {
 
 const Ctx = createContext<AuthCtx | null>(null);
 
+/**
+ * Sessão atual do Supabase Auth. Usável fora da árvore React (ex.: guards de
+ * rota em `beforeLoad`, que rodam antes do `AuthProvider` montar).
+ */
+export function getSession() {
+  return supabase.auth.getSession();
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<User | null>(null);

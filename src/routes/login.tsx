@@ -1,15 +1,14 @@
 import { createFileRoute, Link, useNavigate, redirect } from "@tanstack/react-router";
 import { useState } from "react";
-import { useAuth } from "@/lib/auth";
+import { useAuth, getSession } from "@/lib/auth";
 import { Logo } from "@/components/app/Logo";
-import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/login")({
   beforeLoad: async () => {
     // SSR: localStorage not available — skip redirect check
     if (typeof window === "undefined") return;
-    const { data } = await supabase.auth.getSession();
+    const { data } = await getSession();
     if (data.session) throw redirect({ to: "/dashboard" });
   },
   component: LoginPage,
