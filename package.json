@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "start": "node hostinger/server.mjs",
     "lint": "eslint .",
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "test": "vitest run"
   },
   "dependencies": {
     "@cloudflare/vite-plugin": "^1.25.5",
@@ -86,6 +87,7 @@
     "eslint-plugin-react-refresh": "^0.4.20",
     "globals": "^15.15.0",
     "prettier": "^3.7.3",
-    "typescript-eslint": "^8.56.1"
+    "typescript-eslint": "^8.56.1",
+    "vitest": "^4.1.10"
   }
 }

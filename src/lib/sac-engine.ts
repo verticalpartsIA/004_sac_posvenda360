@@ -50,16 +50,16 @@ async function registrarLog(
   });
 }
 
-function mensagemVIP(nfNumero: string, cliente: string, rastreio?: string): string {
+export function mensagemVIP(nfNumero: string, cliente: string, rastreio?: string): string {
   return `Olá, ${cliente}! 👋\n\nSou da equipe VerticalParts. Sua NF *${nfNumero}* foi emitida e está sendo preparada para envio.${rastreio ? `\n\n📦 Rastreio: *${rastreio}*` : ""}\n\nEstamos à disposição para qualquer dúvida. Bom dia! 🙂`;
 }
 
-function mensagemPesquisa(nfNumero: string, cliente: string, token: string): string {
+export function mensagemPesquisa(nfNumero: string, cliente: string, token: string): string {
   const url = `https://posvenda360.vpsistema.com/nps/form/${token}`;
   return `Olá, ${cliente}! 😊\n\nSua entrega referente à NF *${nfNumero}* foi concluída.\n\nGostaríamos muito de saber sua opinião. Leva menos de 1 minuto:\n👉 ${url}\n\nObrigado pela parceria! — VerticalParts`;
 }
 
-function mensagemAlertaAtraso(nfNumero: string, cliente: string): string {
+export function mensagemAlertaAtraso(nfNumero: string, cliente: string): string {
   return `Olá, ${cliente}.\n\nIdentificamos que a entrega da NF *${nfNumero}* pode estar com atraso. Nossa equipe já está verificando a situação junto à transportadora e retornaremos em breve.\n\nPedimos desculpas pelo transtorno. — VerticalParts`;
 }
 
