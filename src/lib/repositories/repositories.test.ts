@@ -368,3 +368,39 @@ describe("whatsappMessagesRepo", () => {
     expect(entry.removed).toBe(true);
   });
 });
+
+describe("whatsappMessagesRepo", () => {
+  it("listByRemoteJid busca pelo remote_jid, ordenado por created_at asc", () => {
+    whatsappMessagesRepo.listByRemoteJid("5511999999999@s.whatsapp.net");
+    const [{ table, ops }] = fromCalls;
+    expect(table).toBe("whatsapp_messages");
+    expect(ops[0][0]).toBe("select");
+    expect(ops[1]).toEqual(["eq", ["remote_jid", "5511999999999@s.whatsapp.net"]]);
+    expect(ops[2]).toEqual(["order", ["created_at", { ascending: true }]]);
+  });
+
+  it("subscribeToNewMessages assina INSERT filtrado por remote_jid e cancela no cleanup", () => {
+    const onInsert = vi.fn();
+    const unsubscribe = whatsappMessagesRepo.subscribeToNewMessages("55119@x", onInsert);
+
+    expect(channelCalls).toHaveLength(1);
+    const [entry] = channelCalls;
+    expect(entry.name).toBe("wa-thread-55119@x");
+    expect(entry.listeners).toHaveLength(1);
+    const [{ event, filter, callback }] = entry.listeners;
+    expect(event).toBe("postgres_changes");
+    expect(filter).toEqual({
+      event: "INSERT",
+      schema: "public",
+      table: "whatsapp_messages",
+      filter: "remote_jid=eq.55119@x",
+    });
+
+    callback({ new: { id: "m1", body: "oi" } });
+    expect(onInsert).toHaveBeenCalledWith({ id: "m1", body: "oi" });
+
+    expect(entry.removed).toBe(false);
+    unsubscribe();
+    expect(entry.removed).toBe(true);
+  });
+});
