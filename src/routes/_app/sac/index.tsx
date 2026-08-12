@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
-import { Package, Clock, CheckCircle2, AlertTriangle, RefreshCw, ExternalLink, Search, X, CheckCircle, XCircle } from "lucide-react";
+import { Package, Clock, CheckCircle2, AlertTriangle, RefreshCw, ExternalLink, Search, X, CheckCircle, XCircle, History } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/_app/sac/")({
@@ -64,11 +64,16 @@ export default function SacPipeline() {
       // Sincroniza status de faturamento com Omie antes de recarregar
       await fetch("/api/sac/sync-faturamento", { method: "POST" }).catch(() => null);
     }
+    // Só o que ainda falta em pelo menos uma trilha (Entrega OU SAC). O que
+    // já concluiu as duas fica na tela /sac/concluidos — não aqui. Sem
+    // limite artificial: antes um .limit(200) escondia silenciosamente
+    // qualquer pendência mais antiga que as 200 NFs mais recentes.
     const { data } = await supabase
       .from("sac_notas_fiscais")
       .select("id,nf_numero,chave_nfe,numero_pedido_omie,razao_social_cliente,classe_abc,valor_total,data_emissao,previsao_entrega,status_entrega,status_pos_venda,transportadora,codigo_rastreio,pesquisa_enviada,faturado,data_faturamento")
+      .or("status_entrega.neq.ENTREGUE,status_pos_venda.neq.CONCLUIDO")
       .order("data_emissao", { ascending: false })
-      .limit(200);
+      .limit(1000);
     setNfs((data as SacNF[]) ?? []);
     setLoading(false);
   }
@@ -100,12 +105,17 @@ export default function SacPipeline() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold">SAC — Pipeline de NFs</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">Notas fiscais emitidas com acompanhamento pós-venda</p>
+          <h1 className="text-2xl font-semibold">SAC — Pendências</h1>
+          <p className="text-sm text-muted-foreground mt-0.5">NFs com Entrega e/ou SAC ainda não concluídos</p>
         </div>
-        <button onClick={() => carregar(true)} className="flex items-center gap-2 rounded-lg border px-3 py-2 text-sm hover:bg-muted">
-          <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} /> Atualizar
-        </button>
+        <div className="flex items-center gap-2">
+          <Link to="/sac/concluidos" className="flex items-center gap-2 rounded-lg border px-3 py-2 text-sm hover:bg-muted">
+            <History className="h-4 w-4" /> Concluídos
+          </Link>
+          <button onClick={() => carregar(true)} className="flex items-center gap-2 rounded-lg border px-3 py-2 text-sm hover:bg-muted">
+            <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} /> Atualizar
+          </button>
+        </div>
       </div>
 
       {/* Campo de busca */}
@@ -170,7 +180,7 @@ export default function SacPipeline() {
           <div className="flex items-center justify-center py-16 text-muted-foreground text-sm">
             {termoBusca
               ? `Nenhum resultado para "${busca}".`
-              : "Nenhuma NF encontrada. Configure o webhook no Omie para sincronizar automaticamente."}
+              : "Nenhuma pendência! Todas as NFs têm Entrega e SAC concluídos. 🎉"}
           </div>
         ) : (
           <table className="w-full text-sm">

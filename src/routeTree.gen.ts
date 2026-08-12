@@ -27,6 +27,7 @@ import { Route as AppSacIndexRouteImport } from './routes/_app/sac/index'
 import { Route as NpsFormTokenRouteImport } from './routes/nps.form.$token'
 import { Route as AppThreadIdRouteImport } from './routes/_app/thread.$id'
 import { Route as AppSacDevolucoesRouteImport } from './routes/_app/sac/devolucoes'
+import { Route as AppSacConcluidosRouteImport } from './routes/_app/sac/concluidos'
 import { Route as AppSacNfRouteImport } from './routes/_app/sac/$nf'
 import { Route as AppProdutoCodigoRouteImport } from './routes/_app/produto.$codigo'
 import { Route as AppOcorrenciaRoRouteImport } from './routes/_app/ocorrencia.$ro'
@@ -134,6 +135,11 @@ const AppThreadIdRoute = AppThreadIdRouteImport.update({
 const AppSacDevolucoesRoute = AppSacDevolucoesRouteImport.update({
   id: '/sac/devolucoes',
   path: '/sac/devolucoes',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppSacConcluidosRoute = AppSacConcluidosRouteImport.update({
+  id: '/sac/concluidos',
+  path: '/sac/concluidos',
   getParentRoute: () => AppRoute,
 } as any)
 const AppSacNfRoute = AppSacNfRouteImport.update({
@@ -266,6 +272,7 @@ export interface FileRoutesByFullPath {
   '/ocorrencia/$ro': typeof AppOcorrenciaRoRouteWithChildren
   '/produto/$codigo': typeof AppProdutoCodigoRoute
   '/sac/$nf': typeof AppSacNfRoute
+  '/sac/concluidos': typeof AppSacConcluidosRoute
   '/sac/devolucoes': typeof AppSacDevolucoesRoute
   '/thread/$id': typeof AppThreadIdRoute
   '/nps/form/$token': typeof NpsFormTokenRoute
@@ -304,6 +311,7 @@ export interface FileRoutesByTo {
   '/ocorrencia/$ro': typeof AppOcorrenciaRoRouteWithChildren
   '/produto/$codigo': typeof AppProdutoCodigoRoute
   '/sac/$nf': typeof AppSacNfRoute
+  '/sac/concluidos': typeof AppSacConcluidosRoute
   '/sac/devolucoes': typeof AppSacDevolucoesRoute
   '/thread/$id': typeof AppThreadIdRoute
   '/nps/form/$token': typeof NpsFormTokenRoute
@@ -344,6 +352,7 @@ export interface FileRoutesById {
   '/_app/ocorrencia/$ro': typeof AppOcorrenciaRoRouteWithChildren
   '/_app/produto/$codigo': typeof AppProdutoCodigoRoute
   '/_app/sac/$nf': typeof AppSacNfRoute
+  '/_app/sac/concluidos': typeof AppSacConcluidosRoute
   '/_app/sac/devolucoes': typeof AppSacDevolucoesRoute
   '/_app/thread/$id': typeof AppThreadIdRoute
   '/nps/form/$token': typeof NpsFormTokenRoute
@@ -384,6 +393,7 @@ export interface FileRouteTypes {
     | '/ocorrencia/$ro'
     | '/produto/$codigo'
     | '/sac/$nf'
+    | '/sac/concluidos'
     | '/sac/devolucoes'
     | '/thread/$id'
     | '/nps/form/$token'
@@ -422,6 +432,7 @@ export interface FileRouteTypes {
     | '/ocorrencia/$ro'
     | '/produto/$codigo'
     | '/sac/$nf'
+    | '/sac/concluidos'
     | '/sac/devolucoes'
     | '/thread/$id'
     | '/nps/form/$token'
@@ -461,6 +472,7 @@ export interface FileRouteTypes {
     | '/_app/ocorrencia/$ro'
     | '/_app/produto/$codigo'
     | '/_app/sac/$nf'
+    | '/_app/sac/concluidos'
     | '/_app/sac/devolucoes'
     | '/_app/thread/$id'
     | '/nps/form/$token'
@@ -605,6 +617,13 @@ declare module '@tanstack/react-router' {
       path: '/sac/devolucoes'
       fullPath: '/sac/devolucoes'
       preLoaderRoute: typeof AppSacDevolucoesRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/sac/concluidos': {
+      id: '/_app/sac/concluidos'
+      path: '/sac/concluidos'
+      fullPath: '/sac/concluidos'
+      preLoaderRoute: typeof AppSacConcluidosRouteImport
       parentRoute: typeof AppRoute
     }
     '/_app/sac/$nf': {
@@ -793,6 +812,7 @@ interface AppRouteChildren {
   AppOcorrenciaRoRoute: typeof AppOcorrenciaRoRouteWithChildren
   AppProdutoCodigoRoute: typeof AppProdutoCodigoRoute
   AppSacNfRoute: typeof AppSacNfRoute
+  AppSacConcluidosRoute: typeof AppSacConcluidosRoute
   AppSacDevolucoesRoute: typeof AppSacDevolucoesRoute
   AppThreadIdRoute: typeof AppThreadIdRoute
   AppSacIndexRoute: typeof AppSacIndexRoute
@@ -824,6 +844,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppOcorrenciaRoRoute: AppOcorrenciaRoRouteWithChildren,
   AppProdutoCodigoRoute: AppProdutoCodigoRoute,
   AppSacNfRoute: AppSacNfRoute,
+  AppSacConcluidosRoute: AppSacConcluidosRoute,
   AppSacDevolucoesRoute: AppSacDevolucoesRoute,
   AppThreadIdRoute: AppThreadIdRoute,
   AppSacIndexRoute: AppSacIndexRoute,

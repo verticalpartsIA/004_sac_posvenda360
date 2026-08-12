@@ -2718,16 +2718,32 @@ async function handleSyncFaturamento(req, res) {
     throw new Error("sem identificador de pedido");
   }
 
+  // Já faturada e checada há menos que isso? Não reconsulta no Omie agora —
+  // só espera a próxima leva. O que ainda NÃO está faturado é sempre
+  // checado (precisa saber assim que a NF real existir). Isso não perde a
+  // detecção de devolução tardia (fica só menos "ao vivo": no máximo esse
+  // atraso) — antes disso, TODA carga da tela reconsultava as ~300 NFs mais
+  // recentes, mesmo as 100% resolvidas, e passou a levar >60s (timeout).
+  const THROTTLE_MS = 6 * 60 * 60 * 1000; // 6h
+
   try {
     // Busca todas as NFs que tenham pelo menos um dos dois identificadores.
     // chave_nfe presente ⇒ nf_numero já é o número real (veio do ListarNF);
     // chave_nfe ausente ⇒ nf_numero é o placeholder com o número do pedido.
-    const nfRows = await sbFetch(
-      `/rest/v1/sac_notas_fiscais?select=id,codigo_pedido_omie,numero_pedido_omie,nf_numero,chave_nfe,data_emissao` +
-      `&or=(codigo_pedido_omie.not.is.null,numero_pedido_omie.not.is.null)&limit=300`,
+    const nfRowsTodas = await sbFetch(
+      `/rest/v1/sac_notas_fiscais?select=id,codigo_pedido_omie,numero_pedido_omie,nf_numero,chave_nfe,data_emissao,faturado,fat_checado_em` +
+      `&or=(codigo_pedido_omie.not.is.null,numero_pedido_omie.not.is.null)&limit=2000`,
       {method:"GET"}
     ).then(r=>r.json()).catch(()=>[]);
-    if (!Array.isArray(nfRows)||!nfRows.length) return jsonR(200,{ok:true,atualizados:0});
+    if (!Array.isArray(nfRowsTodas)||!nfRowsTodas.length) return jsonR(200,{ok:true,atualizados:0});
+
+    const agora = Date.now();
+    const nfRows = nfRowsTodas.filter((nf) => {
+      if (!nf.faturado) return true; // ainda não confirmado — sempre checa
+      if (!nf.fat_checado_em) return true; // nunca checado — checa
+      return agora - new Date(nf.fat_checado_em).getTime() > THROTTLE_MS;
+    });
+    if (!nfRows.length) return jsonR(200,{ok:true,atualizados:0,adiadas:nfRowsTodas.length});
 
     // Janelas de ListarNF compartilhadas entre pedidos com dFat próximo — evita
     // repetir a mesma consulta para cada NF do mesmo dia.
@@ -2747,6 +2763,7 @@ async function handleSyncFaturamento(req, res) {
             data_faturamento: ped.dataFat || undefined,
             devolvido: ped.devolvido,
             devolvido_parcial: ped.devolvidoParcial,
+            fat_checado_em: new Date().toISOString(),
             updated_at: new Date().toISOString(),
           };
           // Corrige a coluna Pedido com o número visível real
@@ -2769,16 +2786,20 @@ async function handleSyncFaturamento(req, res) {
           // Se não achamos o pedido no Omie mas a NF tem chave (veio do ListarNF),
           // ela existe de fato — marca faturado=true.
           if (nf.chave_nfe) {
-            await sbFetch(`/rest/v1/sac_notas_fiscais?id=eq.${encodeURIComponent(nf.id)}`,{method:"PATCH",body:JSON.stringify({faturado:true,updated_at:new Date().toISOString()})}).catch(()=>{});
+            await sbFetch(`/rest/v1/sac_notas_fiscais?id=eq.${encodeURIComponent(nf.id)}`,{method:"PATCH",body:JSON.stringify({faturado:true,fat_checado_em:new Date().toISOString(),updated_at:new Date().toISOString()})}).catch(()=>{});
             atualizados++;
           } else {
+            // Também marca fat_checado_em aqui — senão um pedido que falha
+            // sempre (ex: excluído no Omie) seria retentado em TODA leva,
+            // sem respeitar o throttle, pra sempre.
+            await sbFetch(`/rest/v1/sac_notas_fiscais?id=eq.${encodeURIComponent(nf.id)}`,{method:"PATCH",body:JSON.stringify({fat_checado_em:new Date().toISOString()})}).catch(()=>{});
             erros.push(`pedido ${codigoInterno||numeroPedido}: ${e.message}`);
           }
         }
       }));
       if (i+LOTE<nfRows.length) await new Promise(r=>setTimeout(r,200));
     }
-    return jsonR(200,{ok:true,atualizados,nf_corrigidas:nfCorrigidas,erros:erros.length?erros:undefined});
+    return jsonR(200,{ok:true,atualizados,nf_corrigidas:nfCorrigidas,adiadas:nfRowsTodas.length-nfRows.length,erros:erros.length?erros:undefined});
   } catch(e) { console.error("[sync-faturamento]",e.message); return jsonR(500,{error:e.message}); }
 }
 
