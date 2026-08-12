@@ -2,6 +2,13 @@ import { createFileRoute, useParams, useNavigate, Link } from "@tanstack/react-r
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { holidaysFor } from "@/lib/domain/feriados.js";
+import * as notasFiscaisRepo from "@/lib/repositories/notasFiscaisRepo";
+import * as pesquisasRepo from "@/lib/repositories/pesquisasRepo";
+import * as devolucoesRepo from "@/lib/repositories/devolucoesRepo";
+import * as auditLogRepo from "@/lib/repositories/auditLogRepo";
+import * as sacClientesRepo from "@/lib/repositories/sacClientesRepo";
+import * as conferenciaStorageRepo from "@/lib/repositories/conferenciaStorageRepo";
+import type { Json } from "@/integrations/supabase/types";
 import { useAuth } from "@/lib/auth";
 import { useStore } from "@/lib/store";
 import { OCCURRENCE_REASON_LABEL, STATUS_LABEL, type OccurrenceReason } from "@/lib/types";
@@ -239,11 +246,9 @@ export default function SacNFDetalhe() {
   async function carregar() {
     setLoading(true);
     const [{ data: nfData }, { data: pesquisaData }, { data: devolucoesData }] = await Promise.all([
-      supabase.from("sac_notas_fiscais")
-        .select("*, obs_omie, dados_omie, sac_clientes(nome_fantasia,whatsapp,email,telefone,contato)")
-        .eq("id", nfId).single(),
-      supabase.from("sac_pesquisas").select("*").eq("nf_id", nfId).maybeSingle(),
-      supabase.from("sac_devolucoes").select("id,motivo,status,valor_estimado,aberta_em").eq("nf_id", nfId).order("aberta_em", { ascending: false }),
+      notasFiscaisRepo.getDetalhe(nfId),
+      pesquisasRepo.getByNfId(nfId),
+      devolucoesRepo.listByNfId(nfId),
     ]);
     setDevolucoes((devolucoesData as DevolucaoResumo[]) ?? []);
 
@@ -297,13 +302,13 @@ export default function SacNFDetalhe() {
   }
 
   async function writeAuditSac(action: string, payload?: Record<string, unknown>) {
-    await supabase.from("audit_log").insert({
+    await auditLogRepo.registrar({
       entity_type: "sac_nf",
       entity_id: nfId,
       action,
       actor_id: user?.id ?? null,
       actor_name: user?.email ?? null,
-      payload: (payload ?? null) as import("@/integrations/supabase/types").Json,
+      payload: (payload ?? null) as Json,
     }).then(({ error }) => {
       if (error) console.error("[sac-audit]", error);
     });
@@ -311,12 +316,9 @@ export default function SacNFDetalhe() {
 
   async function uploadFotoConferencia(idx: number, file: File) {
     setUploadingFoto((p) => ({ ...p, [idx]: true }));
-    const ext = file.name.split(".").pop() ?? "jpg";
-    const path = `${nfId}/item-${idx}-${Date.now()}.${ext}`;
-    const { error } = await supabase.storage.from("sac-conferencia").upload(path, file, { upsert: true });
+    const { error, publicUrl } = await conferenciaStorageRepo.uploadFotoItem(nfId, idx, file);
     if (!error) {
-      const { data } = supabase.storage.from("sac-conferencia").getPublicUrl(path);
-      setFotosConferencia((p) => ({ ...p, [idx]: data.publicUrl }));
+      setFotosConferencia((p) => ({ ...p, [idx]: publicUrl }));
       setFotoItemPublicada((p) => ({ ...p, [idx]: false }));
       setMsgFotoItem((p) => ({ ...p, [idx]: "" }));
     }
@@ -352,7 +354,7 @@ export default function SacNFDetalhe() {
     }
     setSavingExp(true);
     setMsgExp("");
-    const { error } = await supabase.from("sac_notas_fiscais").update({
+    const { error } = await notasFiscaisRepo.update(nfId, {
       tipo_entrega: exp.tipo_entrega,
       transportadora: exp.tipo_entrega === "TRANSPORTADORA" ? (exp.transportadora || null) : null,
       codigo_rastreio: exp.tipo_entrega === "TRANSPORTADORA" ? (exp.codigo_rastreio || null) : null,
@@ -363,7 +365,7 @@ export default function SacNFDetalhe() {
       comprovante_entrega: exp.comprovante_entrega || null,
       status_entrega: calcularStatusEntrega(),
       updated_at: new Date().toISOString(),
-    } as any).eq("id", nfId);
+    } as any);
 
     if (error) {
       setMsgExp("Erro ao salvar.");
@@ -385,12 +387,12 @@ export default function SacNFDetalhe() {
   async function salvarContato() {
     if (!nf?.cnpj_cliente) return;
     setSavingContato(true); setMsgContato("");
-    const { error } = await supabase.from("sac_clientes").update({
+    const { error } = await sacClientesRepo.updateByCnpj(nf.cnpj_cliente, {
       whatsapp: contato.whatsapp || null,
       email: contato.email || null,
       contato: contato.contato_nome || null,
       updated_at: new Date().toISOString(),
-    }).eq("cnpj", nf.cnpj_cliente);
+    });
     setMsgContato(error ? "Erro ao salvar." : "Salvo!");
     setSavingContato(false);
   }
@@ -398,13 +400,13 @@ export default function SacNFDetalhe() {
   async function salvarSac() {
     setSavingSac(true);
     setMsgSac("");
-    const { error } = await supabase.from("sac_notas_fiscais").update({
+    const { error } = await notasFiscaisRepo.update(nfId, {
       previsao_pos_venda: sac.previsao_pos_venda || null,
       status_pos_venda: sac.status_pos_venda,
       data_pos_venda: sac.data_pos_venda || null,
       responsavel_pos_venda: sac.responsavel_pos_venda || null,
       updated_at: new Date().toISOString(),
-    }).eq("id", nfId);
+    });
     if (!error) void writeAuditSac("sac_salvo", { status_pos_venda: sac.status_pos_venda, responsavel: sac.responsavel_pos_venda || null });
     if (!error && sac.status_pos_venda === "CONCLUIDO") {
       await fetch("/api/sac/vpclick-concluir", {
@@ -551,12 +553,12 @@ export default function SacNFDetalhe() {
     };
     let error;
     if (pesquisa?.id) {
-      ({ error } = await supabase.from("sac_pesquisas").update(dados).eq("id", pesquisa.id));
+      ({ error } = await pesquisasRepo.update(pesquisa.id, dados));
     } else {
-      ({ error } = await supabase.from("sac_pesquisas").insert({ nf_id: nfId, ...dados }));
+      ({ error } = await pesquisasRepo.insert({ nf_id: nfId, ...dados }));
     }
     if (!error) {
-      await supabase.from("sac_notas_fiscais").update({ pesquisa_enviada: true }).eq("id", nfId);
+      await notasFiscaisRepo.update(nfId, { pesquisa_enviada: true });
       void carregar();
     }
     setMsgPesq(error ? "Erro ao salvar." : "Pesquisa salva!");
@@ -597,7 +599,7 @@ export default function SacNFDetalhe() {
 
   async function abrirDevolucao() {
     setAbrindoDevolucao(true);
-    const { error } = await supabase.from("sac_devolucoes").insert({
+    const { error } = await devolucoesRepo.abrir({
       nf_id: nfId,
       motivo: motivoDevolucao,
       valor_estimado: nf!.valor_total ?? 0,
