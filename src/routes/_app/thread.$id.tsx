@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useRef, useState, useCallback } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import * as whatsappMessagesRepo from "@/lib/repositories/whatsappMessagesRepo";
 import type { Database } from "@/integrations/supabase/types";
 import { cn } from "@/lib/utils";
 import {
@@ -162,11 +162,7 @@ function ThreadView() {
 
   // ── load ──────────────────────────────────────────────────────────────────
   const load = useCallback(async () => {
-    const { data, error: e } = await supabase
-      .from("whatsapp_messages")
-      .select("*")
-      .eq("remote_jid", remoteJid)
-      .order("created_at", { ascending: true });
+    const { data, error: e } = await whatsappMessagesRepo.listByRemoteJid(remoteJid);
 
     if (e) { console.error("[thread] load error:", e.message); return; }
     setMessages((data as WaMsg[]) ?? []);
@@ -177,31 +173,19 @@ function ThreadView() {
     load();
 
     // Realtime: novas mensagens desta conversa chegam instantaneamente
-    const channel = supabase
-      .channel(`wa-thread-${remoteJid}`)
-      .on<WaMsg>(
-        "postgres_changes",
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "whatsapp_messages",
-          filter: `remote_jid=eq.${remoteJid}`,
-        },
-        (payload) => {
-          setMessages((prev) => {
-            // Remove o update otimista correspondente (se existir) e insere o real
-            const withoutOptimistic = prev.filter(
-              (m) => !(m.id.startsWith("opt-") && m.body === payload.new.body && m.from_me === payload.new.from_me),
-            );
-            // Evita duplicata de mensagens já presentes (ex.: própria insert do send)
-            if (withoutOptimistic.some((m) => m.id === payload.new.id)) return withoutOptimistic;
-            return [...withoutOptimistic, payload.new];
-          });
-        },
-      )
-      .subscribe();
+    const unsubscribe = whatsappMessagesRepo.subscribeToNewMessages(remoteJid, (novaMsg) => {
+      setMessages((prev) => {
+        // Remove o update otimista correspondente (se existir) e insere o real
+        const withoutOptimistic = prev.filter(
+          (m) => !(m.id.startsWith("opt-") && m.body === novaMsg.body && m.from_me === novaMsg.from_me),
+        );
+        // Evita duplicata de mensagens já presentes (ex.: própria insert do send)
+        if (withoutOptimistic.some((m) => m.id === novaMsg.id)) return withoutOptimistic;
+        return [...withoutOptimistic, novaMsg];
+      });
+    });
 
-    return () => { supabase.removeChannel(channel); };
+    return unsubscribe;
   }, [load, remoteJid]);
 
   // scroll para o fim ao receber novas mensagens

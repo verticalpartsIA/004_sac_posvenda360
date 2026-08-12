@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState, useCallback } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import * as auditLogRepo from "@/lib/repositories/auditLogRepo";
 import { cn } from "@/lib/utils";
 import { History, RefreshCw, Filter } from "lucide-react";
 
@@ -72,17 +72,10 @@ export default function AuditLogPage() {
     setLoading(true);
     const from = reset ? 0 : page * PAGE_SIZE;
 
-    let q = supabase
-      .from("audit_log")
-      .select("id, created_at, entity_type, entity_id, action, actor_name, payload")
-      .order("created_at", { ascending: false })
-      .range(from, from + PAGE_SIZE - 1);
-
-    if (filterModule) q = q.eq("entity_type", filterModule);
-    if (filterAction) q = q.eq("action", filterAction);
-    if (filterActor)  q = q.ilike("actor_name", `%${filterActor}%`);
-
-    const { data } = await q;
+    const { data } = await auditLogRepo.listPaginado(
+      { entityType: filterModule || undefined, action: filterAction || undefined, actorName: filterActor || undefined },
+      { from, to: from + PAGE_SIZE - 1 },
+    );
     const rows = (data ?? []) as AuditEntry[];
 
     if (reset) {

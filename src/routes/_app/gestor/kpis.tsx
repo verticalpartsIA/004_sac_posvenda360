@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState, useEffect } from "react";
 import { useStore, slaStatus } from "@/lib/store";
-import { supabase } from "@/integrations/supabase/client";
+import * as notasFiscaisRepo from "@/lib/repositories/notasFiscaisRepo";
 import { BackToDashboard } from "@/components/app/BackToDashboard";
 import {
   ROOT_CAUSE_LABEL,
@@ -68,14 +68,10 @@ function ManagerDashboard() {
     { valor_total: number | null; devolvido: boolean | null; devolvido_parcial: boolean | null; data_emissao: string | null }[]
   >([]);
   useEffect(() => {
-    supabase
-      .from("sac_notas_fiscais")
-      .select("valor_total,devolvido,devolvido_parcial,data_emissao")
-      .or("devolvido.eq.true,devolvido_parcial.eq.true")
-      .then(({ data, error }) => {
-        if (error) { console.error("[KPIs] Falha ao carregar devoluções", error); return; }
-        setDevolucaoNfs(data ?? []);
-      });
+    notasFiscaisRepo.listDevolvidas().then(({ data, error }) => {
+      if (error) { console.error("[KPIs] Falha ao carregar devoluções", error); return; }
+      setDevolucaoNfs(data ?? []);
+    });
   }, []);
   const devolucoesNoPeriodo = useMemo(
     () =>
