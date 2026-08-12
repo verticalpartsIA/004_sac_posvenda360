@@ -4,15 +4,39 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 // sem tocar em rede. O client real (@/integrations/supabase/client) é um Proxy
 // que lança se as env vars de Supabase não estiverem definidas — o que é o caso
 // em teste — então ele precisa ser mockado antes de qualquer repositório ser importado.
-const { fromCalls, storageCalls, resetCalls, supabaseMock } = vi.hoisted(() => {
+type ChannelListener = { event: string; filter: unknown; callback: (payload: unknown) => void };
+type ChannelEntry = {
+  name: string;
+  listeners: ChannelListener[];
+  statusCallback?: (status: string) => void;
+  removed: boolean;
+  channel: unknown;
+};
+
+const { fromCalls, storageCalls, channelCalls, resetCalls, supabaseMock } = vi.hoisted(() => {
   const fromCalls: { table: string; ops: [string, unknown[]][] }[] = [];
   const storageCalls: { bucket: string; ops: [string, unknown[]][] }[] = [];
+  const channelCalls: ChannelEntry[] = [];
 
   function makeQueryBuilder(table: string) {
     const ops: [string, unknown[]][] = [];
     fromCalls.push({ table, ops });
     const builder: Record<string, (...args: unknown[]) => unknown> = {};
-    for (const method of ["select", "eq", "single", "maybeSingle", "order", "update", "insert"]) {
+    for (const method of [
+      "select",
+      "eq",
+      "single",
+      "maybeSingle",
+      "order",
+      "update",
+      "insert",
+      "or",
+      "limit",
+      "range",
+      "ilike",
+      "delete",
+      "in",
+    ]) {
       builder[method] = (...args: unknown[]) => {
         ops.push([method, args]);
         return builder;
@@ -36,16 +60,40 @@ const { fromCalls, storageCalls, resetCalls, supabaseMock } = vi.hoisted(() => {
     };
   }
 
+  function makeChannel(name: string) {
+    const entry: ChannelEntry = { name, listeners: [], removed: false, channel: undefined };
+    const channel = {
+      on: (event: string, filter: unknown, callback: (payload: unknown) => void) => {
+        entry.listeners.push({ event, filter, callback });
+        return channel;
+      },
+      subscribe: (statusCallback?: (status: string) => void) => {
+        entry.statusCallback = statusCallback;
+        return channel;
+      },
+    };
+    entry.channel = channel;
+    channelCalls.push(entry);
+    return channel;
+  }
+
   return {
     fromCalls,
     storageCalls,
+    channelCalls,
     resetCalls: () => {
       fromCalls.length = 0;
       storageCalls.length = 0;
+      channelCalls.length = 0;
     },
     supabaseMock: {
       from: (table: string) => makeQueryBuilder(table),
       storage: { from: (bucket: string) => makeStorageBuilder(bucket) },
+      channel: (name: string) => makeChannel(name),
+      removeChannel: (channel: unknown) => {
+        const entry = channelCalls.find((c) => c.channel === channel);
+        if (entry) entry.removed = true;
+      },
     },
   };
 });
@@ -62,6 +110,7 @@ const devolucoesRepo = await import("./devolucoesRepo");
 const auditLogRepo = await import("./auditLogRepo");
 const sacClientesRepo = await import("./sacClientesRepo");
 const conferenciaStorageRepo = await import("./conferenciaStorageRepo");
+const whatsappMessagesRepo = await import("./whatsappMessagesRepo");
 
 describe("notasFiscaisRepo", () => {
   it("getDetalhe busca pelo id, com join de sac_clientes", () => {
@@ -80,6 +129,32 @@ describe("notasFiscaisRepo", () => {
     expect(table).toBe("sac_notas_fiscais");
     expect(ops[0]).toEqual(["update", [{ pesquisa_enviada: true }]]);
     expect(ops[1]).toEqual(["eq", ["id", "nf-1"]]);
+  });
+
+  it("listPendentes filtra Entrega e/ou SAC não concluídos, mais recentes primeiro, até 1000", () => {
+    notasFiscaisRepo.listPendentes();
+    const [{ table, ops }] = fromCalls;
+    expect(table).toBe("sac_notas_fiscais");
+    expect(ops[0][0]).toBe("select");
+    expect(ops[1]).toEqual(["or", ["status_entrega.neq.ENTREGUE,status_pos_venda.neq.CONCLUIDO"]]);
+    expect(ops[2]).toEqual(["order", ["data_emissao", { ascending: false }]]);
+    expect(ops[3]).toEqual(["limit", [1000]]);
+  });
+
+  it("listConcluidas filtra Entrega ENTREGUE e SAC CONCLUIDO", () => {
+    notasFiscaisRepo.listConcluidas();
+    const [{ table, ops }] = fromCalls;
+    expect(table).toBe("sac_notas_fiscais");
+    expect(ops[1]).toEqual(["eq", ["status_entrega", "ENTREGUE"]]);
+    expect(ops[2]).toEqual(["eq", ["status_pos_venda", "CONCLUIDO"]]);
+    expect(ops[3]).toEqual(["order", ["data_pos_venda", { ascending: false }]]);
+  });
+
+  it("listDevolvidas filtra por devolvido ou devolvido_parcial", () => {
+    notasFiscaisRepo.listDevolvidas();
+    const [{ table, ops }] = fromCalls;
+    expect(table).toBe("sac_notas_fiscais");
+    expect(ops[1]).toEqual(["or", ["devolvido.eq.true,devolvido_parcial.eq.true"]]);
   });
 });
 
@@ -144,6 +219,31 @@ describe("auditLogRepo", () => {
       ["insert", [{ entity_type: "sac_nf", entity_id: "nf-1", action: "teste" }]],
     ]);
   });
+
+  it("listPaginado pagina por range e não aplica filtro quando não informado", () => {
+    auditLogRepo.listPaginado({}, { from: 0, to: 49 });
+    const [{ table, ops }] = fromCalls;
+    expect(table).toBe("audit_log");
+    expect(ops[0][0]).toBe("select");
+    expect(ops[1]).toEqual(["order", ["created_at", { ascending: false }]]);
+    expect(ops[2]).toEqual(["range", [0, 49]]);
+    expect(ops.some(([method]) => method === "eq" || method === "ilike")).toBe(false);
+  });
+
+  it("listPaginado aplica os 3 filtros quando informados", () => {
+    auditLogRepo.listPaginado(
+      { entityType: "sac_nf", action: "sac_salvo", actorName: "ana" },
+      { from: 0, to: 49 },
+    );
+    const [{ ops }] = fromCalls;
+    expect(ops).toEqual(
+      expect.arrayContaining([
+        ["eq", ["entity_type", "sac_nf"]],
+        ["eq", ["action", "sac_salvo"]],
+        ["ilike", ["actor_name", "%ana%"]],
+      ]),
+    );
+  });
 });
 
 describe("conferenciaStorageRepo", () => {
@@ -161,5 +261,41 @@ describe("conferenciaStorageRepo", () => {
     expect(path).toMatch(/^nf-1\/item-2-\d+\.png$/);
     expect(publicUrlCall).toEqual(["getPublicUrl", [path]]);
     expect(publicUrl).toBe(`https://cdn.test/sac-conferencia/${path}`);
+  });
+});
+
+describe("whatsappMessagesRepo", () => {
+  it("listByRemoteJid busca pelo remote_jid, ordenado por created_at asc", () => {
+    whatsappMessagesRepo.listByRemoteJid("5511999999999@s.whatsapp.net");
+    const [{ table, ops }] = fromCalls;
+    expect(table).toBe("whatsapp_messages");
+    expect(ops[0][0]).toBe("select");
+    expect(ops[1]).toEqual(["eq", ["remote_jid", "5511999999999@s.whatsapp.net"]]);
+    expect(ops[2]).toEqual(["order", ["created_at", { ascending: true }]]);
+  });
+
+  it("subscribeToNewMessages assina INSERT filtrado por remote_jid e cancela no cleanup", () => {
+    const onInsert = vi.fn();
+    const unsubscribe = whatsappMessagesRepo.subscribeToNewMessages("55119@x", onInsert);
+
+    expect(channelCalls).toHaveLength(1);
+    const [entry] = channelCalls;
+    expect(entry.name).toBe("wa-thread-55119@x");
+    expect(entry.listeners).toHaveLength(1);
+    const [{ event, filter, callback }] = entry.listeners;
+    expect(event).toBe("postgres_changes");
+    expect(filter).toEqual({
+      event: "INSERT",
+      schema: "public",
+      table: "whatsapp_messages",
+      filter: "remote_jid=eq.55119@x",
+    });
+
+    callback({ new: { id: "m1", body: "oi" } });
+    expect(onInsert).toHaveBeenCalledWith({ id: "m1", body: "oi" });
+
+    expect(entry.removed).toBe(false);
+    unsubscribe();
+    expect(entry.removed).toBe(true);
   });
 });
