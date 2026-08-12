@@ -86,11 +86,7 @@ export async function consultarCliente(codigoCliente: number): Promise<OmieClien
   return cliente;
 }
 
-export function classificarABC(valorTotal: number): "A" | "B" | "C" {
-  if (valorTotal >= 50000) return "A";
-  if (valorTotal >= 10000) return "B";
-  return "C";
-}
+export { classificarABC } from "./domain/curva-abc.js";
 
 export function parseDateBR(dateBR: string): string {
   // DD/MM/YYYY → YYYY-MM-DD
