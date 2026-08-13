@@ -4,6 +4,9 @@ import { join, extname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Readable } from "node:stream";
 import { execSync } from "node:child_process";
+import { classificarABC } from "../src/lib/domain/curva-abc.js";
+import { holidaysFor } from "../src/lib/domain/feriados.js";
+import { BUSINESS_HOURS, prazoUtilMs } from "../src/lib/domain/prazo.js";
 
 // ─── Carrega um .env local (nodejs/.env), SEM sobrescrever o que o painel já injeta ──
 // O Passenger/hPanel injeta os segredos (ANTHROPIC_API_KEY etc.) no process.env. Este
@@ -272,44 +275,7 @@ async function handleWhatsappWebhook(req, res) {
 
 // ─── Chamada ao Claude com histórico completo ─────────────────────────────────
 // ─── Config de atendimento: horários + feriados (fuso America/Sao_Paulo) ──────
-// Horário comercial VerticalParts: Seg–Qui 07:00–18:00 | Sex 07:00–17:00 | Sáb/Dom fechado
-const BUSINESS_HOURS = { 1: [7, 18], 2: [7, 18], 3: [7, 18], 4: [7, 18], 5: [7, 17] };
-
-// Páscoa (Computus) → base dos feriados móveis
-function easterSunday(year) {
-  const a = year % 19, b = Math.floor(year / 100), c = year % 100;
-  const d = Math.floor(b / 4), e = b % 4, f = Math.floor((b + 8) / 25);
-  const g = Math.floor((b - f + 1) / 3), h = (19 * a + b - d - g + 15) % 30;
-  const i = Math.floor(c / 4), k = c % 4, l = (32 + 2 * e + 2 * i - h - k) % 7;
-  const m = Math.floor((a + 11 * h + 22 * l) / 451);
-  const month = Math.floor((h + l - 7 * m + 114) / 31);
-  const day = ((h + l - 7 * m + 114) % 31) + 1;
-  return new Date(Date.UTC(year, month - 1, day));
-}
-const _addDays = (date, n) => { const x = new Date(date); x.setUTCDate(x.getUTCDate() + n); return x; };
-const _mmdd = (d) => String(d.getUTCMonth() + 1).padStart(2, "0") + "-" + String(d.getUTCDate()).padStart(2, "0");
-
-// Feriados (Nacional + Estado SP + Município Guarulhos). Ajuste a gosto da equipe.
-function holidaysFor(year) {
-  const e = easterSunday(year);
-  return {
-    [_mmdd(_addDays(e, -48))]: "Carnaval (segunda)",
-    [_mmdd(_addDays(e, -47))]: "Carnaval (terça)",
-    [_mmdd(_addDays(e, -2))]:  "Sexta-feira Santa",
-    [_mmdd(_addDays(e, 60))]:  "Corpus Christi",
-    "01-01": "Confraternização Universal",
-    "04-21": "Tiradentes",
-    "05-01": "Dia do Trabalho",
-    "09-07": "Independência do Brasil",
-    "10-12": "Nossa Senhora Aparecida",
-    "11-02": "Finados",
-    "11-15": "Proclamação da República",
-    "11-20": "Consciência Negra",
-    "12-25": "Natal",
-    "07-09": "Revolução Constitucionalista (Estado de SP)",
-    "12-08": "Aniversário de Guarulhos",
-  };
-}
+// BUSINESS_HOURS e holidaysFor vêm de ../src/lib/domain (fonte única, compartilhada com o frontend).
 
 // Data/hora atual no fuso de São Paulo
 function nowSaoPaulo() {
@@ -472,31 +438,7 @@ function buildSystemPrompt() {
   return CLAUDE_BASE_PROMPT + "\n\n" + atendimentoContexto() + blocoContatosDepto();
 }
 
-// ─── Prazo em HORAS ÚTEIS (Seg-Qui 07-18h, Sex 07-17h; pula fim de semana e feriados) ──
-// SP = UTC-3 fixo (Brasil sem horário de verão desde 2019).
-const SP_OFFSET_MS = 3 * 3600 * 1000;
-function _spParts(utcMs) {
-  const d = new Date(utcMs - SP_OFFSET_MS); // campos UTC deste objeto = relógio local de SP
-  return { y: d.getUTCFullYear(), mo: d.getUTCMonth(), da: d.getUTCDate(), dow: d.getUTCDay(),
-    mmdd: String(d.getUTCMonth() + 1).padStart(2, "0") + "-" + String(d.getUTCDate()).padStart(2, "0") };
-}
-const _spToUtcMs = (y, mo, da, h, mi) => Date.UTC(y, mo, da, h + 3, mi); // relógio SP -> instante UTC
-function prazoUtilMs(startMs, minutos) {
-  let cur = startMs, rem = minutos, guard = 0;
-  while (rem > 0 && guard++ < 6000) {
-    const p = _spParts(cur);
-    const win = BUSINESS_HOURS[p.dow];
-    const feriado = !!holidaysFor(p.y)[p.mmdd];
-    if (!win || feriado) { cur = _spToUtcMs(p.y, p.mo, p.da + 1, 0, 0); continue; }
-    const ini = _spToUtcMs(p.y, p.mo, p.da, win[0], 0);
-    const fim = _spToUtcMs(p.y, p.mo, p.da, win[1], 0);
-    if (cur < ini) { cur = ini; continue; }
-    if (cur >= fim) { cur = _spToUtcMs(p.y, p.mo, p.da + 1, 0, 0); continue; }
-    const disp = Math.floor((fim - cur) / 60000);
-    if (rem <= disp) { cur += rem * 60000; rem = 0; } else { rem -= disp; cur = fim; }
-  }
-  return cur;
-}
+// prazoUtilMs vem de ../src/lib/domain/prazo.js (fonte única, compartilhada com o frontend).
 
 // ─── GATILHO: cobra o resultado dos handoffs vencidos (chamado pelo cron do VPS) ──────
 async function handleCronHandoffs(req, res) {
@@ -1819,11 +1761,7 @@ async function omieCall(endpoint, call, param) {
   return data;
 }
 
-function classificarABC(valor) {
-  if (valor >= 50000) return "A";
-  if (valor >= 10000) return "B";
-  return "C";
-}
+// classificarABC vem de ../src/lib/domain/curva-abc.js (fonte única, compartilhada com o frontend).
 
 // ─── NF real a partir do pedido ───────────────────────────────────────────────
 // O ConsultarPedido NÃO retorna o número da NF (infoCadastro só traz faturado/
