@@ -7,6 +7,7 @@ import { execSync } from "node:child_process";
 import { classificarABC } from "../src/lib/domain/curva-abc.js";
 import { holidaysFor } from "../src/lib/domain/feriados.js";
 import { BUSINESS_HOURS, prazoUtilMs } from "../src/lib/domain/prazo.js";
+import { parseDateBR, addDiasBR, adicionarDiasUteis } from "../src/lib/domain/data-br.js";
 
 // ─── Carrega um .env local (nodejs/.env), SEM sobrescrever o que o painel já injeta ──
 // O Passenger/hPanel injeta os segredos (ANTHROPIC_API_KEY etc.) no process.env. Este
@@ -1779,17 +1780,12 @@ async function omieCall(endpoint, call, param) {
 // dFat e casar pelo compl.nIdPedido (o filtro nIdPedido não existe no
 // nfListarRequest — também verificado). ide.nNF traz o número real ("00020921"
 // → 20921) e compl.cChaveNFe a chave.
-function _addDiasBR(dataBR, dias) {
-  const [d, m, y] = dataBR.split("/").map(Number);
-  const dt = new Date(Date.UTC(y, m - 1, d + dias));
-  return `${String(dt.getUTCDate()).padStart(2, "0")}/${String(dt.getUTCMonth() + 1).padStart(2, "0")}/${dt.getUTCFullYear()}`;
-}
 async function buscarNFPorPedido(nIdPedido, dFatBR, cacheJanela) {
   if (!nIdPedido) return null;
   const hoje = new Date();
   const hojeBR = `${String(hoje.getDate()).padStart(2, "0")}/${String(hoje.getMonth() + 1).padStart(2, "0")}/${hoje.getFullYear()}`;
-  const ini = dFatBR && dFatBR !== "00/00/0000" ? _addDiasBR(dFatBR, -2) : _addDiasBR(hojeBR, -90);
-  const fim = dFatBR && dFatBR !== "00/00/0000" ? _addDiasBR(dFatBR, 10) : hojeBR;
+  const ini = dFatBR && dFatBR !== "00/00/0000" ? addDiasBR(dFatBR, -2) : addDiasBR(hojeBR, -90);
+  const fim = dFatBR && dFatBR !== "00/00/0000" ? addDiasBR(dFatBR, 10) : hojeBR;
   const chaveCache = `${ini}|${fim}`;
   let registros = cacheJanela?.get(chaveCache);
   if (!registros) {
@@ -1817,14 +1813,6 @@ async function buscarNFPorPedido(nIdPedido, dFatBR, cacheJanela) {
     chaveNFe: nf.compl?.cChaveNFe || null,
     dataEmissao: parseDateBR(nf.ide?.dEmi) || null,
   };
-}
-
-function parseDateBR(d) {
-  // DD/MM/YYYY → YYYY-MM-DD (retorna null se inválido)
-  if (!d || typeof d !== "string" || !d.includes("/")) return null;
-  const [dd, mm, yyyy] = d.split("/");
-  if (!dd || !mm || !yyyy) return null;
-  return `${yyyy}-${mm.padStart(2, "0")}-${dd.padStart(2, "0")}`;
 }
 
 async function enviarWhatsAppSac(numero, texto) {
@@ -1857,17 +1845,6 @@ async function registrarLogSac(nfId, canal, tipo, destinatario, conteudo, ok) {
 }
 
 // +N dias úteis (pula sábado e domingo)
-function adicionarDiasUteis(dataISO, dias) {
-  const d = new Date(dataISO + "T12:00:00");
-  let adicionados = 0;
-  while (adicionados < dias) {
-    d.setDate(d.getDate() + 1);
-    const dow = d.getDay();
-    if (dow !== 0 && dow !== 6) adicionados++;
-  }
-  return d.toISOString().slice(0, 10);
-}
-
 // Trigger 1: cria tarefa "Expedição" no VP Click e menciona @expedição
 async function createVpClickTaskExpedicao(nfId, numeroPedido, razaoSocial, previsaoEntrega) {
   try {
@@ -2632,7 +2609,6 @@ async function handleSyncFaturamento(req, res) {
   const jsonR = (s, o) => { res.statusCode = s; res.setHeader("Content-Type","application/json"); res.setHeader("Access-Control-Allow-Origin","*"); res.end(JSON.stringify(o)); };
   if (req.method === "OPTIONS") { res.statusCode=204; res.setHeader("Access-Control-Allow-Origin","*"); res.setHeader("Access-Control-Allow-Methods","POST,OPTIONS"); res.setHeader("Access-Control-Allow-Headers","Content-Type,Authorization"); return res.end(); }
   if (req.method !== "POST") return jsonR(405, { error: "Method Not Allowed" });
-  function parseDateBR(s) { if (!s || s==="00/00/0000") return null; const [d,m,y]=s.split("/"); return `${y}-${m}-${d}`; }
 
   // Consulta o Omie pelo pedido, tentando primeiro codigo_pedido (ID interno) e
   // depois numero_pedido (número visível) como fallback. Retorna o pedido

@@ -9,6 +9,7 @@
 // fat_checado_em pra não divergir mais do que já diverge.
 import { createAPIFileRoute } from "@tanstack/react-start/api";
 import { createClient } from "@supabase/supabase-js";
+import { parseDateBR } from "@/lib/domain/data-br.js";
 
 const sb = createClient(
   process.env.SUPABASE_URL ?? "https://jkbklzlbhhfnamaeislb.supabase.co",
@@ -19,12 +20,6 @@ const sb = createClient(
 const OMIE_URL = process.env.OMIE_API_URL ?? "https://app.omie.com.br/api/v1";
 const APP_KEY = process.env.OMIE_APP_KEY ?? "8463170967";
 const APP_SECRET = process.env.OMIE_APP_SECRET ?? "69e22b773842044fdb218178521cac59";
-
-function parseDateBR(s: string | undefined | null): string | null {
-  if (!s || s === "00/00/0000") return null;
-  const [d, m, y] = s.split("/");
-  return `${y}-${m}-${d}`;
-}
 
 async function consultarFaturamento(codigoPedido: number): Promise<{ faturado: boolean; dataFat: string | null }> {
   const res = await fetch(`${OMIE_URL}/produtos/pedido/`, {

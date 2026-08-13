@@ -87,12 +87,7 @@ export async function consultarCliente(codigoCliente: number): Promise<OmieClien
 }
 
 export { classificarABC } from "./domain/curva-abc.js";
-
-export function parseDateBR(dateBR: string): string {
-  // DD/MM/YYYY → YYYY-MM-DD
-  const [d, m, y] = dateBR.split("/");
-  return `${y}-${m}-${d}`;
-}
+export { parseDateBR } from "./domain/data-br.js";
 
 export async function incluirAnexoOmie(
   nId: number,

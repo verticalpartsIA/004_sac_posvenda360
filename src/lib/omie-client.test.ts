@@ -9,12 +9,10 @@ describe("classificarABC (re-export)", () => {
   });
 });
 
-describe("parseDateBR", () => {
-  it("converte DD/MM/YYYY para YYYY-MM-DD", () => {
+describe("parseDateBR (re-export)", () => {
+  // Cobertura completa está em ./domain/data-br.test.ts — este é só um
+  // smoke-test de que o re-export a partir do domínio compartilhado funciona.
+  it("re-exporta a implementação de lib/domain/data-br", () => {
     expect(parseDateBR("25/12/2026")).toBe("2026-12-25");
-  });
-
-  it("preserva zeros à esquerda de dia e mês", () => {
-    expect(parseDateBR("01/02/2026")).toBe("2026-02-01");
   });
 });
