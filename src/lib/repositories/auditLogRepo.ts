@@ -6,6 +6,11 @@ export function registrar(entry: TablesInsert<"audit_log">) {
   return supabase.from("audit_log").insert(entry);
 }
 
+/** Todo o audit_log, mais antigo primeiro — usado para reconstruir o histórico embutido em tickets/internal tickets no carregamento do Store (ver #67). */
+export function listAllOrdenado() {
+  return supabase.from("audit_log").select("*").order("created_at", { ascending: true });
+}
+
 export type AuditLogFiltros = { entityType?: string; action?: string; actorName?: string };
 
 /** Lista paginada do audit_log, mais recente primeiro, com filtros opcionais. */

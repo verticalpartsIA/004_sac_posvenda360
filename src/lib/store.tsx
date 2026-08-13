@@ -7,8 +7,14 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { supabase } from "@/integrations/supabase/client";
 import type { Json, Tables } from "@/integrations/supabase/types";
+import * as ticketsRepo from "@/lib/repositories/ticketsRepo";
+import * as internalTicketsRepo from "@/lib/repositories/internalTicketsRepo";
+import * as ticketMessagesRepo from "@/lib/repositories/ticketMessagesRepo";
+import * as npsRepo from "@/lib/repositories/npsRepo";
+import * as pesquisasRepo from "@/lib/repositories/pesquisasRepo";
+import * as auditLogRepo from "@/lib/repositories/auditLogRepo";
+import { slaStatus } from "@/lib/domain/sla";
 import { useAuth } from "./auth";
 import type {
   Attachment,
@@ -80,7 +86,9 @@ function denormalizeTicketStatus(status: TicketStatus): TicketRow["status"] {
   }
 }
 
-function normalizeOccurrenceReason(reason: TicketRow["occurrence_reason"] | null): OccurrenceReason | undefined {
+function normalizeOccurrenceReason(
+  reason: TicketRow["occurrence_reason"] | null,
+): OccurrenceReason | undefined {
   switch (reason) {
     case "devolucao_total":
     case "devolucao_parcial":
@@ -97,7 +105,9 @@ function normalizeOccurrenceReason(reason: TicketRow["occurrence_reason"] | null
   }
 }
 
-function denormalizeOccurrenceReason(reason: OccurrenceReason | undefined): TicketRow["occurrence_reason"] {
+function denormalizeOccurrenceReason(
+  reason: OccurrenceReason | undefined,
+): TicketRow["occurrence_reason"] {
   switch (reason) {
     case "devolucao_total":
     case "devolucao_parcial":
@@ -277,7 +287,9 @@ function extractTicketMeta(audits: AuditLogRow[]) {
 
 function mapAuditLog(row: AuditLogRow): AuditLog {
   const detail =
-    isRecord(row.payload) && typeof row.payload.detail === "string" ? row.payload.detail : undefined;
+    isRecord(row.payload) && typeof row.payload.detail === "string"
+      ? row.payload.detail
+      : undefined;
 
   return {
     id: row.id,
@@ -288,11 +300,7 @@ function mapAuditLog(row: AuditLogRow): AuditLog {
   };
 }
 
-function mapTicket(
-  row: TicketRow,
-  audits: AuditLogRow[],
-  internalIds: string[],
-): Ticket {
+function mapTicket(row: TicketRow, audits: AuditLogRow[], internalIds: string[]): Ticket {
   const meta = extractTicketMeta(audits);
 
   return {
@@ -339,7 +347,7 @@ function mapTicket(
       !!row.resolved_at &&
       new Date(row.resolved_at).getTime() >
         new Date(row.created_at).getTime() + row.sla_hours * 60 * 60 * 1000,
-    channel: (row.channel === "whatsapp" ? "whatsapp" : "manual"),
+    channel: row.channel === "whatsapp" ? "whatsapp" : "manual",
     status: normalizeTicketStatus(row.status),
     priority: row.priority,
     slaHours: row.sla_hours,
@@ -360,7 +368,11 @@ function mapTicket(
   };
 }
 
-function mapInternalResponse(row: TicketMessageRow, openedAt: string, previousAt?: string): InternalResponse {
+function mapInternalResponse(
+  row: TicketMessageRow,
+  openedAt: string,
+  previousAt?: string,
+): InternalResponse {
   return {
     id: row.id,
     at: row.created_at,
@@ -440,7 +452,9 @@ type SacPesquisaRow = {
 
 function mapSacPesquisa(row: SacPesquisaRow): NpsRecord {
   const score = row.nps_score ?? 0;
-  const nf = Array.isArray(row.sac_notas_fiscais) ? row.sac_notas_fiscais[0] ?? null : row.sac_notas_fiscais;
+  const nf = Array.isArray(row.sac_notas_fiscais)
+    ? (row.sac_notas_fiscais[0] ?? null)
+    : row.sac_notas_fiscais;
   return {
     id: `sac-pesquisa-${row.id}`,
     customer: nf?.razao_social_cliente ?? `NF ${nf?.nf_numero ?? "?"}`,
@@ -527,11 +541,18 @@ interface StoreCtx {
   createTicket: (i: NewTicketInput) => Promise<Ticket>;
   updateStatus: (id: string, status: TicketStatus) => void;
   assignTicket: (id: string, userId: string | null) => void;
-  resolveTicket: (id: string, data: { rootCause: RootCause; justification: string; report: string }) => void;
+  resolveTicket: (
+    id: string,
+    data: { rootCause: RootCause; justification: string; report: string },
+  ) => void;
   setNps: (id: string, score: number) => void;
   createInternalTicket: (i: NewInternalTicketInput) => InternalTicket;
   respondInternalTicket: (id: string, text: string) => void;
-  updateInternalStatus: (id: string, status: InternalTicketStatus, resolutionSummary?: string) => void;
+  updateInternalStatus: (
+    id: string,
+    status: InternalTicketStatus,
+    resolutionSummary?: string,
+  ) => void;
   submitNpsSurvey: (i: NewNpsInput) => NpsRecord;
   updateQualidade: (id: string, data: QualidadeInput) => void;
 }
@@ -551,25 +572,25 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [globalSearchQuery, setGlobalSearchQuery] = useState("");
 
   const loadAll = useCallback(async () => {
-    const [ticketsRes, internalRes, messagesRes, auditsRes, npsRes, sacPesquisasRes] = await Promise.all([
-      supabase.from("tickets").select("*").order("created_at", { ascending: false }),
-      supabase.from("internal_tickets").select("*").order("opened_at", { ascending: false }),
-      supabase.from("ticket_messages").select("*").order("created_at", { ascending: true }),
-      supabase.from("audit_log").select("*").order("created_at", { ascending: true }),
-      supabase.from("nps_records").select("*").order("survey_date", { ascending: false }),
-      supabase
-        .from("sac_pesquisas")
-        .select("id,nps_score,observacoes,respondida_em,created_at,sac_notas_fiscais(razao_social_cliente,nf_numero)")
-        .not("respondida_em", "is", null)
-        .order("respondida_em", { ascending: false }),
-    ]);
+    const [ticketsRes, internalRes, messagesRes, auditsRes, npsRes, sacPesquisasRes] =
+      await Promise.all([
+        ticketsRepo.listAll(),
+        internalTicketsRepo.listAll(),
+        ticketMessagesRepo.listAll(),
+        auditLogRepo.listAllOrdenado(),
+        npsRepo.listAll(),
+        pesquisasRepo.listRespondidas(),
+      ]);
 
     if (ticketsRes.error) console.error("[Store] Failed to load tickets", ticketsRes.error);
-    if (internalRes.error) console.error("[Store] Failed to load internal tickets", internalRes.error);
-    if (messagesRes.error) console.error("[Store] Failed to load ticket messages", messagesRes.error);
+    if (internalRes.error)
+      console.error("[Store] Failed to load internal tickets", internalRes.error);
+    if (messagesRes.error)
+      console.error("[Store] Failed to load ticket messages", messagesRes.error);
     if (auditsRes.error) console.error("[Store] Failed to load audit log", auditsRes.error);
     if (npsRes.error) console.error("[Store] Failed to load NPS records", npsRes.error);
-    if (sacPesquisasRes.error) console.error("[Store] Failed to load SAC pesquisas", sacPesquisasRes.error);
+    if (sacPesquisasRes.error)
+      console.error("[Store] Failed to load SAC pesquisas", sacPesquisasRes.error);
 
     const ticketRows = ticketsRes.data ?? [];
     const internalRows = internalRes.data ?? [];
@@ -582,7 +603,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       mapTicket(
         row,
         auditRows.filter((audit) => audit.entity_type === "ticket" && audit.entity_id === row.id),
-        internalRows.filter((internal) => internal.linked_occurrence_id === row.id).map((internal) => internal.id),
+        internalRows
+          .filter((internal) => internal.linked_occurrence_id === row.id)
+          .map((internal) => internal.id),
       ),
     );
 
@@ -609,8 +632,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, [loadAll, user?.id]);
 
   const writeAudit = useCallback(
-    async (entityType: string, entityId: string, action: string, payload?: Record<string, Json>) => {
-      const { error } = await supabase.from("audit_log").insert({
+    async (
+      entityType: string,
+      entityId: string,
+      action: string,
+      payload?: Record<string, Json>,
+    ) => {
+      const { error } = await auditLogRepo.registrar({
         entity_type: entityType,
         entity_id: entityId,
         action,
@@ -626,41 +654,37 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const createTicket = useCallback<StoreCtx["createTicket"]>(
     async (input) => {
-      const { data, error } = await supabase
-        .from("tickets")
-        .insert({
-          customer: input.customer,
-          customer_doc: input.customerDoc ?? null,
-          customer_contato: input.customerContato ?? null,
-          customer_telefone: input.customerTelefone ?? null,
-          city: input.city ?? null,
-          state: input.state ?? null,
-          fornecedor: input.fornecedor ?? null,
-          part: input.part,
-          part_code: input.partCode,
-          vendedor: input.vendedor ?? null,
-          nf_numero: input.nfNumero ?? null,
-          nf_valor: input.nfValor ?? null,
-          quantity: input.quantity ?? null,
-          unit_value: input.unitValue ?? null,
-          reason: input.reason,
-          occurrence_reason: denormalizeOccurrenceReason(input.occurrenceReason),
-          responsible_sector: denormalizeResponsibleSector(input.responsibleSector),
-          origin: input.origin ?? null,
-          resolution_status: input.resolutionStatus ?? null,
-          channel: input.channel,
-          priority: input.priority,
-          sla_hours: input.slaHours,
-          whatsapp_thread_id: input.whatsappThreadId ?? null,
-          sac_nf_id: input.sacNfId ?? null,
-          acao_contencao: denormalizeContainmentActions(input.acaoContencao),
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          ...(input.productFamily ? { product_family: input.productFamily } as any : {}),
-          created_by: user?.id ?? null,
-          assigned_to: user?.id ?? null,
-        })
-        .select("*")
-        .single();
+      const { data, error } = await ticketsRepo.insert({
+        customer: input.customer,
+        customer_doc: input.customerDoc ?? null,
+        customer_contato: input.customerContato ?? null,
+        customer_telefone: input.customerTelefone ?? null,
+        city: input.city ?? null,
+        state: input.state ?? null,
+        fornecedor: input.fornecedor ?? null,
+        part: input.part,
+        part_code: input.partCode,
+        vendedor: input.vendedor ?? null,
+        nf_numero: input.nfNumero ?? null,
+        nf_valor: input.nfValor ?? null,
+        quantity: input.quantity ?? null,
+        unit_value: input.unitValue ?? null,
+        reason: input.reason,
+        occurrence_reason: denormalizeOccurrenceReason(input.occurrenceReason),
+        responsible_sector: denormalizeResponsibleSector(input.responsibleSector),
+        origin: input.origin ?? null,
+        resolution_status: input.resolutionStatus ?? null,
+        channel: input.channel,
+        priority: input.priority,
+        sla_hours: input.slaHours,
+        whatsapp_thread_id: input.whatsappThreadId ?? null,
+        sac_nf_id: input.sacNfId ?? null,
+        acao_contencao: denormalizeContainmentActions(input.acaoContencao),
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        ...(input.productFamily ? ({ product_family: input.productFamily } as any) : {}),
+        created_by: user?.id ?? null,
+        assigned_to: user?.id ?? null,
+      });
 
       if (error) throw error;
 
@@ -684,17 +708,16 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       );
 
       void (async () => {
-        const { error } = await supabase
-          .from("tickets")
-          .update({ status: denormalizeTicketStatus(status) })
-          .eq("id", id);
+        const { error } = await ticketsRepo.update(id, { status: denormalizeTicketStatus(status) });
 
         if (error) {
           console.error("[Store] Failed to update ticket status", error);
           // rollback optimistic update
           if (prev !== undefined) {
             setTickets((ts) =>
-              ts.map((ticket) => (ticket.id === id ? { ...ticket, status: prev, updatedAt: now() } : ticket)),
+              ts.map((ticket) =>
+                ticket.id === id ? { ...ticket, status: prev, updatedAt: now() } : ticket,
+              ),
             );
           }
           return;
@@ -714,19 +737,22 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       const prev = tickets.find((t) => t.id === id)?.assignee;
 
       setTickets((ts) =>
-        ts.map((ticket) => (ticket.id === id ? { ...ticket, assignee: userId ?? undefined, updatedAt: now() } : ticket)),
+        ts.map((ticket) =>
+          ticket.id === id
+            ? { ...ticket, assignee: userId ?? undefined, updatedAt: now() }
+            : ticket,
+        ),
       );
 
       void (async () => {
-        const { error } = await supabase
-          .from("tickets")
-          .update({ assigned_to: userId })
-          .eq("id", id);
+        const { error } = await ticketsRepo.update(id, { assigned_to: userId });
 
         if (error) {
           console.error("[Store] Failed to assign ticket", error);
           setTickets((ts) =>
-            ts.map((ticket) => (ticket.id === id ? { ...ticket, assignee: prev, updatedAt: now() } : ticket)),
+            ts.map((ticket) =>
+              ticket.id === id ? { ...ticket, assignee: prev, updatedAt: now() } : ticket,
+            ),
           );
           return;
         }
@@ -760,15 +786,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
       void (async () => {
         const resolvedAt = now();
-        const { error } = await supabase
-          .from("tickets")
-          .update({
-            status: "concluido",
-            root_cause: data.rootCause,
-            resolved_at: resolvedAt,
-            updated_at: resolvedAt,
-          })
-          .eq("id", id);
+        const { error } = await ticketsRepo.update(id, {
+          status: "concluido",
+          root_cause: data.rootCause,
+          resolved_at: resolvedAt,
+          updated_at: resolvedAt,
+        });
 
         if (error) {
           console.error("[Store] Failed to resolve ticket", error);
@@ -796,10 +819,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
       void (async () => {
         const sentAt = now();
-        const { error } = await supabase
-          .from("tickets")
-          .update({ nps: score, nps_sent_at: sentAt, updated_at: sentAt })
-          .eq("id", id);
+        const { error } = await ticketsRepo.update(id, {
+          nps: score,
+          nps_sent_at: sentAt,
+          updated_at: sentAt,
+        });
 
         if (error) {
           console.error("[Store] Failed to save ticket NPS", error);
@@ -837,20 +861,16 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setInternalTickets((prev) => [optimistic, ...prev]);
 
       void (async () => {
-        const { data, error } = await supabase
-          .from("internal_tickets")
-          .insert({
-            target_department: input.targetDepartment,
-            priority: input.priority,
-            subject: input.subject,
-            description: input.description,
-            linked_occurrence_id: input.linkedOccurrenceId ?? null,
-            linked_customer: input.linkedCustomer ?? null,
-            sla_hours: input.slaHours,
-            opened_by: user?.id ?? null,
-          })
-          .select("id")
-          .single();
+        const { data, error } = await internalTicketsRepo.insert({
+          target_department: input.targetDepartment,
+          priority: input.priority,
+          subject: input.subject,
+          description: input.description,
+          linked_occurrence_id: input.linkedOccurrenceId ?? null,
+          linked_customer: input.linkedCustomer ?? null,
+          sla_hours: input.slaHours,
+          opened_by: user?.id ?? null,
+        });
 
         if (error) {
           console.error("[Store] Failed to create internal ticket", error);
@@ -901,21 +921,19 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
       void (async () => {
         const [{ error: messageError }, { error: statusError }] = await Promise.all([
-          supabase.from("ticket_messages").insert({
+          ticketMessagesRepo.insert({
             internal_ticket_id: id,
             body: text,
             kind: "nota_interna",
             author_id: user?.id ?? null,
             author_name: currentUser,
           }),
-          supabase
-            .from("internal_tickets")
-            .update({ status: "em_andamento", updated_at: now() })
-            .eq("id", id),
+          internalTicketsRepo.update(id, { status: "em_andamento", updated_at: now() }),
         ]);
 
         if (messageError) console.error("[Store] Failed to add internal response", messageError);
-        if (statusError) console.error("[Store] Failed to update internal ticket status", statusError);
+        if (statusError)
+          console.error("[Store] Failed to update internal ticket status", statusError);
         await loadAll();
       })();
     },
@@ -948,7 +966,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           payload.response = resolutionSummary ?? null;
         }
 
-        const { error } = await supabase.from("internal_tickets").update(payload).eq("id", id);
+        const { error } = await internalTicketsRepo.update(id, payload);
         if (error) {
           console.error("[Store] Failed to update internal ticket", error);
           return;
@@ -983,7 +1001,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setNpsRecords((prev) => [optimistic, ...prev]);
 
       void (async () => {
-        const { error } = await supabase.from("nps_records").insert({
+        const { error } = await npsRepo.insert({
           customer: input.customer,
           customer_tier: input.customerTier,
           ticket_id: input.occurrenceId ?? null,
@@ -1034,15 +1052,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       );
 
       void (async () => {
-        const { error } = await supabase
-          .from("tickets")
-          .update({
-            nc_descricao: data.descricaoNaoConformidade ?? null,
-            acao_contencao: denormalizeContainmentActions(data.acaoContencao),
-            custo_nao_qualidade: data.custoNaoQualidade ?? null,
-            updated_at: now(),
-          })
-          .eq("id", id);
+        const { error } = await ticketsRepo.update(id, {
+          nc_descricao: data.descricaoNaoConformidade ?? null,
+          acao_contencao: denormalizeContainmentActions(data.acaoContencao),
+          custo_nao_qualidade: data.custoNaoQualidade ?? null,
+          updated_at: now(),
+        });
 
         if (error) {
           console.error("[Store] Failed to update quality fields", error);
@@ -1116,27 +1131,7 @@ export function useStore() {
   return c;
 }
 
-function formatDuration(hours: number): string {
-  if (hours >= 24) {
-    const days = Math.floor(hours / 24);
-    const rem = Math.round(hours % 24);
-    return rem > 0 ? `${days}d ${rem}h` : `${days}d`;
-  }
-  return `${hours.toFixed(1)}h`;
-}
-
-export function slaStatus(
-  t: Ticket,
-): { pct: number; label: string; tone: "ok" | "warn" | "danger"; overdueHours: number } {
-  const elapsed = (Date.now() - new Date(t.createdAt).getTime()) / (1000 * 60 * 60);
-  const pct = Math.min(100, (elapsed / t.slaHours) * 100);
-  if (t.status === "concluido") return { pct: 100, label: "SLA cumprido", tone: "ok", overdueHours: 0 };
-  if (pct >= 100) {
-    const overdueHours = Math.max(0, elapsed - t.slaHours);
-    return { pct: 100, label: `SLA estourado há ${formatDuration(overdueHours)}`, tone: "danger", overdueHours };
-  }
-  const restantes = Math.max(0, t.slaHours - elapsed).toFixed(1);
-  if (pct >= 80) return { pct, label: `80% - ${restantes}h restantes`, tone: "danger", overdueHours: 0 };
-  if (pct >= 50) return { pct, label: `${restantes}h restantes (50%)`, tone: "warn", overdueHours: 0 };
-  return { pct, label: `${restantes}h restantes`, tone: "ok", overdueHours: 0 };
-}
+// slaStatus é uma função pura (sem estado/supabase) e vive em lib/domain/sla —
+// mesmo padrão do #64 — para ser testável em unidade e reutilizável fora do
+// Store. Re-exportada aqui para não quebrar quem já importa de "@/lib/store".
+export { slaStatus };
