@@ -4,6 +4,7 @@ import { useStore, slaStatus } from "@/lib/store";
 import { useAuth } from "@/lib/auth";
 import { StatusBadge, PriorityBadge } from "@/components/app/StatusBadge";
 import { SlaBar } from "@/components/app/SlaBar";
+import { BotaoTutorial } from "@/components/app/BotaoTutorial";
 import { ArrowUpRight, Clock, AlertTriangle, CheckCircle2, MessageCircle, UserPlus } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -84,9 +85,12 @@ function OperatorDashboard() {
             {open.length} tickets em andamento · {atRisk} demandam atenção imediata
           </p>
         </div>
-        <Link to="/nova-ocorrencia" className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90">
-          + Novo ticket
-        </Link>
+        <div className="flex items-center gap-2">
+          <BotaoTutorial />
+          <Link to="/nova-ocorrencia" className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90">
+            + Novo ticket
+          </Link>
+        </div>
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
