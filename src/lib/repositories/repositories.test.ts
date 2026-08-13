@@ -367,4 +367,50 @@ describe("whatsappMessagesRepo", () => {
     unsubscribe();
     expect(entry.removed).toBe(true);
   });
+
+  it("listRecent ordena por created_at desc e respeita o limit informado", () => {
+    whatsappMessagesRepo.listRecent(50);
+    const [{ table, ops }] = fromCalls;
+    expect(table).toBe("whatsapp_messages");
+    expect(ops[0][0]).toBe("select");
+    expect(ops[1]).toEqual(["order", ["created_at", { ascending: false }]]);
+    expect(ops[2]).toEqual(["limit", [50]]);
+  });
+
+  it("listRecent usa 500 como limit padrão", () => {
+    whatsappMessagesRepo.listRecent();
+    const [{ ops }] = fromCalls;
+    expect(ops[2]).toEqual(["limit", [500]]);
+  });
+
+  it("deleteByRemoteJids apaga por lista de remote_jid", () => {
+    whatsappMessagesRepo.deleteByRemoteJids(["a@x", "b@x"]);
+    const [{ table, ops }] = fromCalls;
+    expect(table).toBe("whatsapp_messages");
+    expect(ops[0][0]).toBe("delete");
+    expect(ops[1]).toEqual(["in", ["remote_jid", ["a@x", "b@x"]]]);
+  });
+
+  it("subscribeToAllNewMessages assina INSERT sem filtro por conversa e propaga status/insert/cleanup", () => {
+    const onInsert = vi.fn();
+    const onStatusChange = vi.fn();
+    const unsubscribe = whatsappMessagesRepo.subscribeToAllNewMessages(onInsert, onStatusChange);
+
+    expect(channelCalls).toHaveLength(1);
+    const [entry] = channelCalls;
+    expect(entry.name).toBe("wa-threads-realtime");
+    const [{ event, filter, callback }] = entry.listeners;
+    expect(event).toBe("postgres_changes");
+    expect(filter).toEqual({ event: "INSERT", schema: "public", table: "whatsapp_messages" });
+
+    callback({ new: { id: "m2" } });
+    expect(onInsert).toHaveBeenCalledWith({ id: "m2" });
+
+    entry.statusCallback?.("SUBSCRIBED");
+    expect(onStatusChange).toHaveBeenCalledWith("SUBSCRIBED");
+
+    expect(entry.removed).toBe(false);
+    unsubscribe();
+    expect(entry.removed).toBe(true);
+  });
 });
