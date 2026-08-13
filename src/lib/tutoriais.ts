@@ -21,7 +21,7 @@ export type Tutorial = {
 const TUTORIAIS: Record<string, Tutorial> = {
   "/dashboard": {
     titulo: "Como usar o Dashboard",
-    embedUrl: "https://www.youtube-nocookie.com/embed/RwmDX3BzjU8",
+    embedUrl: "https://www.youtube-nocookie.com/embed/sOOyyUyBfd8",
   },
 };
 
