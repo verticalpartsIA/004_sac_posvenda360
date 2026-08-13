@@ -2064,8 +2064,10 @@ async function ingerirPedidoOmie(codigoPedido, { skipNotify = false } = {}) {
 // Ingestão via nfconsultar/ListarNF — usa o número real da NF (não numero_pedido)
 // nfData = item de nfCadastro[] retornado pela API nfconsultar
 async function ingerirNFOmie(nfData, { skipNotify = false } = {}) {
-  // Número e chave da NF
-  const nfNumero  = String(nfData.compl?.nNumNF || nfData.ide?.nNF || "?");
+  // Número e chave da NF — ide.nNF vem com zero à esquerda ("00021265"), igual
+  // ao tratamento em buscarNFPorPedido (mesmo formato usado no resto da tabela).
+  const nfNumeroBruto = String(nfData.compl?.nNumNF || nfData.ide?.nNF || "?").trim();
+  const nfNumero  = /^\d+$/.test(nfNumeroBruto) ? String(Number(nfNumeroBruto)) : nfNumeroBruto;
   const chaveNFe  = nfData.compl?.cChaveNFe || null;
   const dataEmissao = parseDateBR(nfData.ide?.dEmi) || new Date().toISOString().slice(0, 10);
   // vNF fica dentro de total.ICMSTot.vNF na estrutura do nfconsultar/ListarNF
