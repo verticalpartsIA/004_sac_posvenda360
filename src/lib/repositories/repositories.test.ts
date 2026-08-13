@@ -31,6 +31,7 @@ const { fromCalls, storageCalls, channelCalls, resetCalls, supabaseMock } = vi.h
       "update",
       "insert",
       "or",
+      "not",
       "limit",
       "range",
       "ilike",
@@ -113,6 +114,10 @@ const conferenciaStorageRepo = await import("./conferenciaStorageRepo");
 const whatsappMessagesRepo = await import("./whatsappMessagesRepo");
 const userRolesRepo = await import("./userRolesRepo");
 const profilesRepo = await import("./profilesRepo");
+const ticketsRepo = await import("./ticketsRepo");
+const internalTicketsRepo = await import("./internalTicketsRepo");
+const ticketMessagesRepo = await import("./ticketMessagesRepo");
+const npsRepo = await import("./npsRepo");
 
 describe("notasFiscaisRepo", () => {
   it("getDetalhe busca pelo id, com join de sac_clientes", () => {
@@ -193,6 +198,16 @@ describe("pesquisasRepo", () => {
     expect(table).toBe("sac_pesquisas");
     expect(ops).toEqual([["insert", [{ nf_id: "nf-1", nps_score: 9 }]]]);
   });
+
+  it("listRespondidas filtra por respondida_em preenchida, com join de sac_notas_fiscais", () => {
+    pesquisasRepo.listRespondidas();
+    const [{ table, ops }] = fromCalls;
+    expect(table).toBe("sac_pesquisas");
+    expect(ops[0][0]).toBe("select");
+    expect(ops[0][1][0] as string).toContain("sac_notas_fiscais(razao_social_cliente,nf_numero)");
+    expect(ops[1]).toEqual(["not", ["respondida_em", "is", null]]);
+    expect(ops[2]).toEqual(["order", ["respondida_em", { ascending: false }]]);
+  });
 });
 
 describe("devolucoesRepo", () => {
@@ -266,6 +281,14 @@ describe("auditLogRepo", () => {
       ]),
     );
   });
+
+  it("listAllOrdenado traz tudo, mais antigo primeiro", () => {
+    auditLogRepo.listAllOrdenado();
+    const [{ table, ops }] = fromCalls;
+    expect(table).toBe("audit_log");
+    expect(ops[0][0]).toBe("select");
+    expect(ops[1]).toEqual(["order", ["created_at", { ascending: true }]]);
+  });
 });
 
 describe("conferenciaStorageRepo", () => {
@@ -330,6 +353,118 @@ describe("profilesRepo", () => {
     const [{ table, ops }] = fromCalls;
     expect(table).toBe("profiles");
     expect(ops).toEqual([["select", ["user_id, display_name, departamento"]]]);
+  });
+});
+
+describe("ticketsRepo", () => {
+  it("listAll ordena por created_at desc", () => {
+    ticketsRepo.listAll();
+    const [{ table, ops }] = fromCalls;
+    expect(table).toBe("tickets");
+    expect(ops[0][0]).toBe("select");
+    expect(ops[1]).toEqual(["order", ["created_at", { ascending: false }]]);
+  });
+
+  it("insert grava e retorna a linha criada", () => {
+    ticketsRepo.insert({
+      customer: "Cliente X",
+      part: "Peça",
+      part_code: "P1",
+      reason: "motivo",
+      channel: "manual",
+      priority: "media",
+      sla_hours: 24,
+    });
+    const [{ table, ops }] = fromCalls;
+    expect(table).toBe("tickets");
+    expect(ops[0][0]).toBe("insert");
+    expect(ops[1][0]).toBe("select");
+    expect(ops[2][0]).toBe("single");
+  });
+
+  it("update filtra pelo id do ticket", () => {
+    ticketsRepo.update("t-1", { status: "concluido" });
+    const [{ table, ops }] = fromCalls;
+    expect(table).toBe("tickets");
+    expect(ops[0]).toEqual(["update", [{ status: "concluido" }]]);
+    expect(ops[1]).toEqual(["eq", ["id", "t-1"]]);
+  });
+});
+
+describe("internalTicketsRepo", () => {
+  it("listAll ordena por opened_at desc", () => {
+    internalTicketsRepo.listAll();
+    const [{ table, ops }] = fromCalls;
+    expect(table).toBe("internal_tickets");
+    expect(ops[0][0]).toBe("select");
+    expect(ops[1]).toEqual(["order", ["opened_at", { ascending: false }]]);
+  });
+
+  it("insert grava e retorna só o id", () => {
+    internalTicketsRepo.insert({
+      target_department: "expedicao",
+      priority: "media",
+      subject: "assunto",
+      description: "desc",
+      sla_hours: 24,
+    });
+    const [{ table, ops }] = fromCalls;
+    expect(table).toBe("internal_tickets");
+    expect(ops[0][0]).toBe("insert");
+    expect(ops[1]).toEqual(["select", ["id"]]);
+    expect(ops[2][0]).toBe("single");
+  });
+
+  it("update filtra pelo id do chamado interno", () => {
+    internalTicketsRepo.update("i-1", { status: "resolvido" });
+    const [{ table, ops }] = fromCalls;
+    expect(table).toBe("internal_tickets");
+    expect(ops[0]).toEqual(["update", [{ status: "resolvido" }]]);
+    expect(ops[1]).toEqual(["eq", ["id", "i-1"]]);
+  });
+});
+
+describe("ticketMessagesRepo", () => {
+  it("listAll ordena por created_at asc", () => {
+    ticketMessagesRepo.listAll();
+    const [{ table, ops }] = fromCalls;
+    expect(table).toBe("ticket_messages");
+    expect(ops[0][0]).toBe("select");
+    expect(ops[1]).toEqual(["order", ["created_at", { ascending: true }]]);
+  });
+
+  it("insert grava o payload sem filtro adicional", () => {
+    ticketMessagesRepo.insert({ internal_ticket_id: "i-1", body: "texto", kind: "nota_interna" });
+    const [{ table, ops }] = fromCalls;
+    expect(table).toBe("ticket_messages");
+    expect(ops).toEqual([
+      ["insert", [{ internal_ticket_id: "i-1", body: "texto", kind: "nota_interna" }]],
+    ]);
+  });
+});
+
+describe("npsRepo", () => {
+  it("listAll ordena por survey_date desc", () => {
+    npsRepo.listAll();
+    const [{ table, ops }] = fromCalls;
+    expect(table).toBe("nps_records");
+    expect(ops[0][0]).toBe("select");
+    expect(ops[1]).toEqual(["order", ["survey_date", { ascending: false }]]);
+  });
+
+  it("insert grava o payload sem filtro adicional", () => {
+    npsRepo.insert({
+      customer: "Cliente X",
+      customer_tier: "B",
+      q1_recomendacao: 9,
+      q2_resolucao: 9,
+      q3_agilidade: 9,
+      category: "promotor",
+      trigger: "manual",
+    });
+    const [{ table, ops }] = fromCalls;
+    expect(table).toBe("nps_records");
+    expect(ops[0][0]).toBe("insert");
   });
 });
 
