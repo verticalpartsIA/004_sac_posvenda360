@@ -43,13 +43,15 @@ export function BotaoTutorial({ rota }: { rota?: string }) {
           </DialogHeader>
           <div className="aspect-video w-full overflow-hidden rounded-md border bg-black">
             {open && (
-              <iframe
-                src={tutorial.embedUrl}
-                title={tutorial.titulo}
+              <video
+                src={tutorial.videoUrl}
                 className="h-full w-full"
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                allowFullScreen
-              />
+                controls
+                autoPlay
+                controlsList="nodownload"
+              >
+                Seu navegador não suporta a reprodução de vídeo.
+              </video>
             )}
           </div>
         </DialogContent>

@@ -1,27 +1,24 @@
 /**
  * Mapa de vídeos-tutorial por rota.
  *
- * Piloto: os vídeos ficam no YouTube como "Não listado" (qualquer pessoa com o
- * link assiste, mas não aparece em busca/canal). Aqui guardamos apenas a URL de
- * embed — nenhum vídeo é armazenado no Supabase. Para adicionar/trocar um
- * tutorial, edite este arquivo (não há tabela no banco por enquanto; quando
- * não-devs precisarem editar sem deploy, migrar para uma tabela `tutoriais`).
+ * Os vídeos são auto-hospedados no Supabase Storage (bucket público
+ * `Videos_Tutoriais`) e servidos como MP4 direto — sem YouTube/Drive, sem
+ * moderação, sem login, sem trava de bot. Aqui guardamos apenas a URL pública.
+ * Para adicionar/trocar: suba o mp4 no bucket e ajuste a URL aqui.
  *
  * A chave é o `pathname` da rota (ex.: "/dashboard").
  */
 export type Tutorial = {
   titulo: string;
-  /**
-   * URL de embed. YouTube: `https://www.youtube-nocookie.com/embed/<id>`
-   * (domínio nocookie = privacidade aprimorada, sem cookies de rastreamento).
-   */
-  embedUrl: string;
+  /** URL pública do arquivo .mp4 (Supabase Storage, bucket público). */
+  videoUrl: string;
 };
 
 const TUTORIAIS: Record<string, Tutorial> = {
   "/dashboard": {
     titulo: "Como usar o Dashboard",
-    embedUrl: "https://www.youtube-nocookie.com/embed/sOOyyUyBfd8",
+    videoUrl:
+      "https://jkbklzlbhhfnamaeislb.supabase.co/storage/v1/object/public/Videos_Tutoriais/dashboard.mp4",
   },
 };
 
