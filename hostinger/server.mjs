@@ -874,6 +874,14 @@ async function historicoContato(remoteJid) {
   } catch { return ""; }
 }
 
+// Evolution responde 400 com "exists:false" quando não confirma o número no WhatsApp
+// (comum em @lid/contato ainda não sincronizado) — nesses casos a msg pode ter sido
+// entregue mesmo assim, então tratamos como best-effort em vez de falha dura.
+function isExistsFalse(result) {
+  const msgs = result?.response?.message;
+  return Array.isArray(msgs) && msgs.some((m) => m.exists === false);
+}
+
 // ─── Robustez: envio de WhatsApp com timeout + retry (Evolution não pode travar a resposta) ──
 async function evoSendText(number, text, { tries = 2 } = {}) {
   let lastErr = "sem tentativa";
@@ -1401,9 +1409,15 @@ async function handleWhatsappStart(req, res) {
     });
     evResult = await r.json().catch(() => ({}));
     if (!r.ok) {
-      const detail = evResult?.message ?? evResult?.error ?? `HTTP ${r.status}`;
-      console.error("[start] Evolution error:", evResult);
-      return json(502, { error: `Evolution API: ${detail}` });
+      if (isExistsFalse(evResult)) {
+        // Evolution não confirma o número no WhatsApp (comum em contato ainda não
+        // sincronizado) — segue como best-effort em vez de bloquear o atendente.
+        console.warn("[start] Evolution: exists=false para", phone, "— tratando como best-effort");
+      } else {
+        const detail = evResult?.message ?? evResult?.error ?? `HTTP ${r.status}`;
+        console.error("[start] Evolution error:", evResult);
+        return json(502, { error: `Não foi possível enviar pelo WhatsApp: ${JSON.stringify(detail)}` });
+      }
     }
   } catch (e) {
     return json(503, { error: `Falha ao conectar na Evolution API: ${e.message}` });
@@ -1588,12 +1602,6 @@ async function handleWhatsappSend(req, res) {
     .replace("@c.us", "");
 
   const number = remoteJid; // passa o JID completo — Evolution API v2 aceita
-
-  // Helpers para detectar "exists: false" (contato não verificado mas entregável)
-  function isExistsFalse(result) {
-    const msgs = result?.response?.message;
-    return Array.isArray(msgs) && msgs.some((m) => m.exists === false);
-  }
 
   // 1. Envia via Evolution API
   let evResult = {};
