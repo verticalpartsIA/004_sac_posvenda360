@@ -1,7 +1,6 @@
-import { createFileRoute, useParams, useNavigate, Link } from "@tanstack/react-router";
+import { createFileRoute, useParams, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { holidaysFor } from "@/lib/domain/feriados.js";
 import * as notasFiscaisRepo from "@/lib/repositories/notasFiscaisRepo";
 import * as pesquisasRepo from "@/lib/repositories/pesquisasRepo";
 import * as devolucoesRepo from "@/lib/repositories/devolucoesRepo";
@@ -11,149 +10,28 @@ import * as conferenciaStorageRepo from "@/lib/repositories/conferenciaStorageRe
 import type { Json } from "@/integrations/supabase/types";
 import { useAuth } from "@/lib/auth";
 import { useStore } from "@/lib/store";
-import { OCCURRENCE_REASON_LABEL, STATUS_LABEL, type OccurrenceReason } from "@/lib/types";
-import { cn } from "@/lib/utils";
-import { ArrowLeft, Save, Truck, MessageCircle, Phone, CheckCircle2, Clock, Package, AlertTriangle, Send, Eye, EyeOff, ClipboardList, Camera, X, PlusCircle, PackageX, PackageOpen, PackageCheck } from "lucide-react";
+import { type OccurrenceReason } from "@/lib/types";
+import { addBusinessDays } from "@/components/sac/nf-detalhe/helpers";
+import type {
+  DevolucaoResumo,
+  NFDetalhe,
+  OmieItem,
+  Pesquisa,
+} from "@/components/sac/nf-detalhe/types";
+import { NfHeader } from "@/components/sac/nf-detalhe/NfHeader";
+import { OcorrenciaPanel } from "@/components/sac/nf-detalhe/OcorrenciaPanel";
+import { DevolucaoPanel } from "@/components/sac/nf-detalhe/DevolucaoPanel";
+import { ContatoPanel, type ContatoForm } from "@/components/sac/nf-detalhe/ContatoPanel";
+import { ConferenciaPanel } from "@/components/sac/nf-detalhe/ConferenciaPanel";
+import { ExpedicaoPanel, type ExpedicaoForm } from "@/components/sac/nf-detalhe/ExpedicaoPanel";
+import { ObsOmiePanel } from "@/components/sac/nf-detalhe/ObsOmiePanel";
+import { FotosConferenciaOmiePanel } from "@/components/sac/nf-detalhe/FotosConferenciaOmiePanel";
+import { SacPanel, type SacForm } from "@/components/sac/nf-detalhe/SacPanel";
+import { PesquisaPanel, type PesquisaForm } from "@/components/sac/nf-detalhe/PesquisaPanel";
 
 export const Route = createFileRoute("/_app/sac/$nf")({
   component: SacNFDetalhe,
 });
-
-// Pula fim de semana e feriado (feriados vêm de lib/domain/feriados, a mesma
-// fonte usada pelo backend — ver #64). ANTES desta troca havia aqui uma quarta
-// cópia do calendário de feriados, incompleta (faltavam Consciência Negra,
-// Revolução Constitucionalista/SP e Aniversário de Guarulhos) e que também
-// pulava a própria Páscoa (domingo, já non-útil por cair sempre em fim de
-// semana) — unificar corrige essa divergência, não só move o código.
-function addBusinessDays(dateStr: string, days: number): string {
-  const date = new Date(dateStr + "T12:00:00"); // evita timezone shift
-  let added = 0;
-  while (added < days) {
-    date.setDate(date.getDate() + 1);
-    const dow = date.getDay();
-    if (dow === 0 || dow === 6) continue;
-    const mmdd = String(date.getMonth() + 1).padStart(2, "0") + "-" + String(date.getDate()).padStart(2, "0");
-    if (holidaysFor(date.getFullYear())[mmdd]) continue;
-    added++;
-  }
-  return date.toISOString().slice(0, 10);
-}
-
-type DevolucaoResumo = {
-  id: string;
-  motivo: string;
-  status: "aberta" | "recebida" | "concluida" | "cancelada";
-  valor_estimado: number | null;
-  aberta_em: string;
-};
-
-type NFDetalhe = {
-  id: string;
-  nf_numero: string;
-  razao_social_cliente: string;
-  cnpj_cliente: string;
-  classe_abc: "A" | "B" | "C";
-  valor_total: number;
-  data_emissao: string | null;
-  previsao_entrega: string | null;
-  status_entrega: "EMITIDA" | "EM_TRANSITO" | "ENTREGUE" | "ATRASADA";
-  transportadora: string | null;
-  codigo_rastreio: string | null;
-  // expedição
-  data_coleta: string | null;
-  transportadora_entregou: boolean | null;
-  data_entrega_real: string | null;
-  comprovante_entrega: string | null;
-  // pós-venda
-  previsao_pos_venda: string | null;
-  status_pos_venda: "PENDENTE" | "EM_ANDAMENTO" | "CONCLUIDO";
-  data_pos_venda: string | null;
-  responsavel_pos_venda: string | null;
-  obs_omie: string | null;
-  numero_pedido_omie: string | null;
-  codigo_pedido_omie: string | null;
-  sac_clientes: {
-    nome_fantasia: string | null;
-    whatsapp: string | null;
-    email: string | null;
-    telefone: string | null;
-    contato: string | null;
-  } | null;
-};
-
-type OmieItem = {
-  produto?: {
-    codigo_produto?: string;
-    descricao?: string;
-    quantidade?: number;
-  };
-};
-
-type Pesquisa = {
-  id: string;
-  produto_correto: boolean | null;
-  atendeu_prazo: boolean | null;
-  recebeu_nota_boleto: boolean | null;
-  produto_atendeu_expectativas: boolean | null;
-  avaliacao_atendimento: number | null;
-  nps_score: number | null;
-  dificuldade_compra: boolean | null;
-  pontos_positivos: string | null;
-  pontos_melhoria: string | null;
-  compraria_novamente: boolean | null;
-  sugestoes: string | null;
-  observacoes: string | null;
-  respondida_em: string | null;
-};
-
-const STATUS_CONFIG = {
-  EMITIDA:     { label: "Emitida",     icon: Package,       cls: "bg-blue-50 text-blue-700 border-blue-200" },
-  EM_TRANSITO: { label: "Em trânsito", icon: Clock,         cls: "bg-amber-50 text-amber-700 border-amber-200" },
-  ENTREGUE:    { label: "Entregue",    icon: CheckCircle2,  cls: "bg-green-50 text-green-700 border-green-200" },
-  ATRASADA:    { label: "Atrasada",    icon: AlertTriangle, cls: "bg-red-50 text-red-700 border-red-200" },
-};
-
-const ABC_CLS = { A: "bg-gold text-black", B: "bg-blue-100 text-blue-800", C: "bg-muted text-muted-foreground" };
-
-function fmt(v: number) { return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }); }
-function fmtDate(d: string | null) {
-  if (!d) return "—";
-  return new Date(d.length === 10 ? d + "T12:00:00" : d).toLocaleDateString("pt-BR");
-}
-
-// Botão Sim/Não/Não respondeu
-function SimNao({ value, onChange }: { value: boolean | null; onChange: (v: boolean | null) => void }) {
-  return (
-    <div className="flex gap-2">
-      {([true, false, null] as const).map((v) => (
-        <button key={String(v)} type="button"
-          onClick={() => onChange(v === value ? null : v)}
-          className={cn("rounded-lg border px-3 py-1.5 text-xs font-medium transition-all",
-            value === v
-              ? v === true ? "bg-green-500 text-white border-green-500"
-                : v === false ? "bg-red-500 text-white border-red-500"
-                : "bg-muted text-muted-foreground"
-              : "border-border hover:bg-muted")}>
-          {v === true ? "Sim" : v === false ? "Não" : "—"}
-        </button>
-      ))}
-    </div>
-  );
-}
-
-// Estrelas 1-5
-function Estrelas({ value, onChange }: { value: number | null; onChange: (v: number) => void }) {
-  return (
-    <div className="flex gap-1">
-      {[1, 2, 3, 4, 5].map((n) => (
-        <button key={n} type="button" onClick={() => onChange(n)}
-          className={cn("text-xl transition-all hover:scale-110", n <= (value ?? 0) ? "text-gold" : "text-muted-foreground/30")}>
-          ★
-        </button>
-      ))}
-    </div>
-  );
-}
 
 export default function SacNFDetalhe() {
   const { nf: nfId } = useParams({ from: "/_app/sac/$nf" });
@@ -166,13 +44,13 @@ export default function SacNFDetalhe() {
   const [motivoInicial, setMotivoInicial] = useState<OccurrenceReason | "">("");
 
   // Formulário Expedição
-  const [exp, setExp] = useState({
-    tipo_entrega: "TRANSPORTADORA" as "TRANSPORTADORA" | "ENTREGA_PROPRIA" | "RETIRADA_CLIENTE",
+  const [exp, setExp] = useState<ExpedicaoForm>({
+    tipo_entrega: "TRANSPORTADORA",
     transportadora: "",
     codigo_rastreio: "",
     retirado_por: "",
     data_coleta: "",
-    transportadora_entregou: null as boolean | null,
+    transportadora_entregou: null,
     data_entrega_real: "",
     comprovante_entrega: "",
   });
@@ -180,14 +58,18 @@ export default function SacNFDetalhe() {
   const [msgExp, setMsgExp] = useState("");
 
   // Contato editável (WhatsApp / Email / nome do contato)
-  const [contato, setContato] = useState({ whatsapp: "", email: "", contato_nome: "" });
+  const [contato, setContato] = useState<ContatoForm>({
+    whatsapp: "",
+    email: "",
+    contato_nome: "",
+  });
   const [savingContato, setSavingContato] = useState(false);
   const [msgContato, setMsgContato] = useState("");
 
   // Formulário SAC
-  const [sac, setSac] = useState({
+  const [sac, setSac] = useState<SacForm>({
     previsao_pos_venda: "",
-    status_pos_venda: "PENDENTE" as "PENDENTE" | "EM_ANDAMENTO" | "CONCLUIDO",
+    status_pos_venda: "PENDENTE",
     data_pos_venda: "",
     responsavel_pos_venda: "",
   });
@@ -195,7 +77,7 @@ export default function SacNFDetalhe() {
   const [msgSac, setMsgSac] = useState("");
 
   // Formulário Pesquisa
-  const [pesq, setPesq] = useState<Omit<Pesquisa, "id" | "respondida_em">>({
+  const [pesq, setPesq] = useState<PesquisaForm>({
     produto_correto: null,
     atendeu_prazo: null,
     recebeu_nota_boleto: null,
@@ -238,10 +120,14 @@ export default function SacNFDetalhe() {
   // fechamento acontecem na tela dedicada /sac/devolucoes (Expedição/Gestor).
   const [devolucoes, setDevolucoes] = useState<DevolucaoResumo[]>([]);
   const [abrindoDevolucao, setAbrindoDevolucao] = useState(false);
-  const [motivoDevolucao, setMotivoDevolucao] = useState<"devolucao_total" | "devolucao_parcial">("devolucao_total");
+  const [motivoDevolucao, setMotivoDevolucao] = useState<"devolucao_total" | "devolucao_parcial">(
+    "devolucao_total",
+  );
   const [obsDevolucao, setObsDevolucao] = useState("");
 
-  useEffect(() => { void carregar(); }, [nfId]);
+  useEffect(() => {
+    void carregar();
+  }, [nfId]);
 
   async function carregar() {
     setLoading(true);
@@ -302,16 +188,18 @@ export default function SacNFDetalhe() {
   }
 
   async function writeAuditSac(action: string, payload?: Record<string, unknown>) {
-    await auditLogRepo.registrar({
-      entity_type: "sac_nf",
-      entity_id: nfId,
-      action,
-      actor_id: user?.id ?? null,
-      actor_name: user?.email ?? null,
-      payload: (payload ?? null) as Json,
-    }).then(({ error }) => {
-      if (error) console.error("[sac-audit]", error);
-    });
+    await auditLogRepo
+      .registrar({
+        entity_type: "sac_nf",
+        entity_id: nfId,
+        action,
+        actor_id: user?.id ?? null,
+        actor_name: user?.email ?? null,
+        payload: (payload ?? null) as Json,
+      })
+      .then(({ error }) => {
+        if (error) console.error("[sac-audit]", error);
+      });
   }
 
   async function uploadFotoConferencia(idx: number, file: File) {
@@ -334,8 +222,16 @@ export default function SacNFDetalhe() {
   function calcularStatusEntrega(): NFDetalhe["status_entrega"] {
     if (exp.data_entrega_real) return "ENTREGUE";
     if (exp.data_coleta) return "EM_TRANSITO";
-    if (nf?.previsao_entrega && new Date(nf.previsao_entrega + "T23:59:59") < new Date()) return "ATRASADA";
+    if (nf?.previsao_entrega && new Date(nf.previsao_entrega + "T23:59:59") < new Date())
+      return "ATRASADA";
     return "EMITIDA";
+  }
+
+  function handleExpChange(next: ExpedicaoForm) {
+    setExp(next);
+    if (next.data_entrega_real && next.data_entrega_real !== exp.data_entrega_real) {
+      setSac((p) => ({ ...p, previsao_pos_venda: addBusinessDays(next.data_entrega_real, 3) }));
+    }
   }
 
   async function salvarExpedicao() {
@@ -349,18 +245,25 @@ export default function SacNFDetalhe() {
         const qtd = item.produto?.quantidade ?? 0;
         return conferencias[i] != null && conferencias[i] !== qtd;
       });
-      if (!todasOk) { setMsgExp("Confira todos os itens antes de salvar."); return; }
-      if (temDivGuard && !divergenciaReportada) { setMsgExp("Reporte a divergência antes de salvar."); return; }
+      if (!todasOk) {
+        setMsgExp("Confira todos os itens antes de salvar.");
+        return;
+      }
+      if (temDivGuard && !divergenciaReportada) {
+        setMsgExp("Reporte a divergência antes de salvar.");
+        return;
+      }
     }
     setSavingExp(true);
     setMsgExp("");
     const { error } = await notasFiscaisRepo.update(nfId, {
       tipo_entrega: exp.tipo_entrega,
-      transportadora: exp.tipo_entrega === "TRANSPORTADORA" ? (exp.transportadora || null) : null,
-      codigo_rastreio: exp.tipo_entrega === "TRANSPORTADORA" ? (exp.codigo_rastreio || null) : null,
-      retirado_por: exp.tipo_entrega === "RETIRADA_CLIENTE" ? (exp.retirado_por || null) : null,
+      transportadora: exp.tipo_entrega === "TRANSPORTADORA" ? exp.transportadora || null : null,
+      codigo_rastreio: exp.tipo_entrega === "TRANSPORTADORA" ? exp.codigo_rastreio || null : null,
+      retirado_por: exp.tipo_entrega === "RETIRADA_CLIENTE" ? exp.retirado_por || null : null,
       data_coleta: exp.data_coleta || null,
-      transportadora_entregou: exp.tipo_entrega === "TRANSPORTADORA" ? exp.transportadora_entregou : null,
+      transportadora_entregou:
+        exp.tipo_entrega === "TRANSPORTADORA" ? exp.transportadora_entregou : null,
       data_entrega_real: exp.data_entrega_real || null,
       comprovante_entrega: exp.comprovante_entrega || null,
       status_entrega: calcularStatusEntrega(),
@@ -373,11 +276,16 @@ export default function SacNFDetalhe() {
       return;
     }
 
-    void writeAuditSac("expedicao_salva", { status_entrega: calcularStatusEntrega(), tipo_entrega: exp.tipo_entrega });
+    void writeAuditSac("expedicao_salva", {
+      status_entrega: calcularStatusEntrega(),
+      tipo_entrega: exp.tipo_entrega,
+    });
     setMsgExp("Salvo! Criando tarefa no VP Click...");
-    const { error: fnErr } = await supabase.functions.invoke("pv360-delivery-event", {
-      body: { nf_id: nfId },
-    }).catch(() => ({ data: null, error: new Error("indisponível") }));
+    const { error: fnErr } = await supabase.functions
+      .invoke("pv360-delivery-event", {
+        body: { nf_id: nfId },
+      })
+      .catch(() => ({ data: null, error: new Error("indisponível") }));
 
     setMsgExp(fnErr ? "Salvo! (VP Click indisponível)" : "Salvo! Tarefa criada no VP Click.");
     void carregar();
@@ -386,7 +294,8 @@ export default function SacNFDetalhe() {
 
   async function salvarContato() {
     if (!nf?.cnpj_cliente) return;
-    setSavingContato(true); setMsgContato("");
+    setSavingContato(true);
+    setMsgContato("");
     const { error } = await sacClientesRepo.updateByCnpj(nf.cnpj_cliente, {
       whatsapp: contato.whatsapp || null,
       email: contato.email || null,
@@ -407,7 +316,11 @@ export default function SacNFDetalhe() {
       responsavel_pos_venda: sac.responsavel_pos_venda || null,
       updated_at: new Date().toISOString(),
     });
-    if (!error) void writeAuditSac("sac_salvo", { status_pos_venda: sac.status_pos_venda, responsavel: sac.responsavel_pos_venda || null });
+    if (!error)
+      void writeAuditSac("sac_salvo", {
+        status_pos_venda: sac.status_pos_venda,
+        responsavel: sac.responsavel_pos_venda || null,
+      });
     if (!error && sac.status_pos_venda === "CONCLUIDO") {
       await fetch("/api/sac/vpclick-concluir", {
         method: "POST",
@@ -429,7 +342,7 @@ export default function SacNFDetalhe() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ nf_id: nfId, obs: obsOmie }),
       });
-      const data = await res.json() as { error?: string };
+      const data = (await res.json()) as { error?: string };
       if (res.ok) void writeAuditSac("obs_enviada_omie", { obs_preview: obsOmie.slice(0, 100) });
       setMsgObs(!res.ok ? (data.error ?? "Erro ao enviar.") : "Enviado para o Omie com sucesso!");
     } catch {
@@ -457,7 +370,10 @@ export default function SacNFDetalhe() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ nf_id: nfId, fotos }),
       });
-      const data = await res.json() as { error?: string; resultados?: { nome: string; ok: boolean }[] };
+      const data = (await res.json()) as {
+        error?: string;
+        resultados?: { nome: string; ok: boolean }[];
+      };
       if (res.ok) {
         const ok = (data.resultados ?? []).filter((r) => r.ok).length;
         void writeAuditSac("fotos_enviadas_omie", { quantidade: ok });
@@ -487,7 +403,10 @@ export default function SacNFDetalhe() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ nf_id: nfId, fotos: [{ url, nome }] }),
       });
-      const data = await res.json() as { error?: string; resultados?: { nome: string; ok: boolean }[] };
+      const data = (await res.json()) as {
+        error?: string;
+        resultados?: { nome: string; ok: boolean }[];
+      };
       if (res.ok && (data.resultados ?? []).some((r) => r.ok)) {
         void writeAuditSac("foto_item_enviada_omie", { item_idx: idx, descricao });
         setFotoItemPublicada((p) => ({ ...p, [idx]: true }));
@@ -527,16 +446,25 @@ export default function SacNFDetalhe() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ nf_id: nfId, itens: payload, obs_divergencia: obsDiv }),
       });
-      if (!res.ok) { setMsgDiv("Erro ao reportar divergência."); }
-      else {
+      if (!res.ok) {
+        setMsgDiv("Erro ao reportar divergência.");
+      } else {
         setDivergenciaReportada(true);
         setMsgDiv("Divergência reportada — time notificado.");
         void writeAuditSac("divergencia_reportada", {
           qtd_divergentes: payload.filter((p) => p.divergencia_tipo).length,
-          itens: payload.filter((p) => p.divergencia_tipo).map((p) => ({ sku: p.sku, descricao: p.descricao, divergencia_tipo: p.divergencia_tipo })),
+          itens: payload
+            .filter((p) => p.divergencia_tipo)
+            .map((p) => ({
+              sku: p.sku,
+              descricao: p.descricao,
+              divergencia_tipo: p.divergencia_tipo,
+            })),
         });
       }
-    } catch { setMsgDiv("Erro de conexão."); }
+    } catch {
+      setMsgDiv("Erro de conexão.");
+    }
     setReportandoDiv(false);
   }
 
@@ -565,18 +493,21 @@ export default function SacNFDetalhe() {
     setSavingPesq(false);
   }
 
-  if (loading) return <div className="py-20 text-center text-muted-foreground text-sm">Carregando...</div>;
-  if (!nf) return <div className="py-20 text-center text-muted-foreground text-sm">NF não encontrada.</div>;
+  if (loading)
+    return <div className="py-20 text-center text-muted-foreground text-sm">Carregando...</div>;
+  if (!nf)
+    return (
+      <div className="py-20 text-center text-muted-foreground text-sm">NF não encontrada.</div>
+    );
 
   const itensOmie = ((nf as any).dados_omie?.det ?? []) as OmieItem[];
-  const todasPreenchidas = itensOmie.length === 0 || itensOmie.every((_, i) => conferencias[i] != null);
+  const todasPreenchidas =
+    itensOmie.length === 0 || itensOmie.every((_, i) => conferencias[i] != null);
   const temDivergencia = itensOmie.some((item, i) => {
     const qtd = item.produto?.quantidade ?? 0;
     return conferencias[i] != null && conferencias[i] !== qtd;
   });
 
-  const cfg = STATUS_CONFIG[nf.status_entrega];
-  const StatusIcon = cfg.icon;
   const nomeCliente = nf.sac_clientes?.nome_fantasia ?? nf.razao_social_cliente;
   const ocorrenciasVinculadas = tickets.filter((t) => t.sacNfId === nfId);
 
@@ -607,724 +538,118 @@ export default function SacNFDetalhe() {
       aberta_por: user?.email ?? null,
     });
     setAbrindoDevolucao(false);
-    if (error) { console.error("[sac/$nf] abrirDevolucao error:", error.message); return; }
+    if (error) {
+      console.error("[sac/$nf] abrirDevolucao error:", error.message);
+      return;
+    }
     setObsDevolucao("");
     void carregar();
   }
 
   return (
     <div className="space-y-5 max-w-3xl">
+      <NfHeader
+        nf={nf}
+        nomeCliente={nomeCliente}
+        showValor={showValor}
+        onToggleShowValor={() => setShowValor((v) => !v)}
+      />
 
-      {/* Cabeçalho */}
-      <div className="flex items-start gap-3">
-        <Link to="/sac" className="mt-1 rounded-lg border p-2 hover:bg-muted shrink-0">
-          <ArrowLeft className="h-4 w-4" />
-        </Link>
-        <div className="flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <h1 className="text-xl font-semibold">
-              Pedido {nf.numero_pedido_omie ?? nf.nf_numero}
-            </h1>
-            {nf.numero_pedido_omie && nf.nf_numero !== nf.numero_pedido_omie && (
-              <span className="text-xs text-muted-foreground font-mono">NF {nf.nf_numero}</span>
-            )}
-            <span className={cn("rounded-full px-2.5 py-0.5 text-[11px] font-bold", ABC_CLS[nf.classe_abc])}>Classe {nf.classe_abc}</span>
-            <span className={cn("inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-medium", cfg.cls)}>
-              <StatusIcon className="h-3 w-3" />{cfg.label}
-            </span>
-          </div>
-          <p className="text-sm text-muted-foreground mt-0.5">{nomeCliente} — CNPJ {nf.cnpj_cliente}</p>
-        </div>
-        <div className="text-right shrink-0">
-          <div className="flex items-center justify-end gap-1.5">
-            <span className={cn("text-xl font-semibold tabular-nums transition-all", !showValor && "blur-sm select-none")}>
-              {fmt(nf.valor_total ?? 0)}
-            </span>
-            <button
-              onClick={() => setShowValor((v) => !v)}
-              className="rounded p-1 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-              title={showValor ? "Ocultar valor" : "Exibir valor"}
-            >
-              {showValor ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
-            </button>
-          </div>
-          <div className="text-xs text-muted-foreground">Emissão {fmtDate(nf.data_emissao)}</div>
-        </div>
-      </div>
+      <OcorrenciaPanel
+        ocorrenciasVinculadas={ocorrenciasVinculadas}
+        motivoInicial={motivoInicial}
+        onMotivoInicialChange={setMotivoInicial}
+        onAbrirOcorrencia={abrirOcorrencia}
+      />
 
-      {/* ─── OCORRÊNCIA DE PÓS-VENDA ─── */}
-      <div className="rounded-xl border bg-card overflow-hidden">
-        <div className="flex items-center gap-2 border-b bg-red-50 px-5 py-3">
-          <AlertTriangle className="h-4 w-4 text-red-700" />
-          <h2 className="text-sm font-semibold text-red-800">Ocorrência de Pós-Venda</h2>
-        </div>
-        <div className="p-5 space-y-3">
-          {ocorrenciasVinculadas.length > 0 && (
-            <div className="space-y-2">
-              {ocorrenciasVinculadas.map((t) => (
-                <Link
-                  key={t.id}
-                  to="/ocorrencia/$ro"
-                  params={{ ro: t.code }}
-                  className="flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-background px-3 py-2 text-sm hover:bg-muted"
-                >
-                  <span>
-                    <span className="font-mono font-semibold">{t.code}</span>{" "}
-                    <span className="text-muted-foreground">
-                      · {STATUS_LABEL[t.status]}
-                      {t.occurrenceReason && <> · {OCCURRENCE_REASON_LABEL[t.occurrenceReason]}</>}
-                    </span>
-                  </span>
-                  <span className="text-xs font-semibold text-gold">Abrir ocorrência →</span>
-                </Link>
-              ))}
-            </div>
-          )}
-          <div className="flex flex-wrap items-center gap-2">
-            <select
-              value={motivoInicial}
-              onChange={(e) => setMotivoInicial(e.target.value as OccurrenceReason)}
-              aria-label="Motivo inicial da ocorrência"
-              className="rounded-lg border bg-background px-3 py-2 text-sm"
-            >
-              <option value="">Selecione o motivo inicial…</option>
-              {(Object.keys(OCCURRENCE_REASON_LABEL) as OccurrenceReason[]).map((k) => (
-                <option key={k} value={k}>{OCCURRENCE_REASON_LABEL[k]}</option>
-              ))}
-            </select>
-            <button
-              type="button"
-              onClick={abrirOcorrencia}
-              className="inline-flex items-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700"
-            >
-              <PlusCircle className="h-4 w-4" /> Abrir ocorrência deste pedido
-            </button>
-          </div>
-          <p className="text-xs text-muted-foreground">
-            Leva cliente, pedido, NF, transportadora e rastreio para a nova ocorrência. Nada é criado automaticamente — a ocorrência só existe se você concluir o fluxo em "Nova Ocorrência".
-          </p>
-        </div>
-      </div>
+      <DevolucaoPanel
+        devolucoes={devolucoes}
+        valorTotal={nf.valor_total}
+        motivoDevolucao={motivoDevolucao}
+        onMotivoDevolucaoChange={setMotivoDevolucao}
+        obsDevolucao={obsDevolucao}
+        onObsDevolucaoChange={setObsDevolucao}
+        abrindoDevolucao={abrindoDevolucao}
+        onAbrirDevolucao={abrirDevolucao}
+      />
 
-      {/* ─── DEVOLUÇÃO DE PRODUTO ─── */}
-      <div className="rounded-xl border bg-card overflow-hidden">
-        <div className="flex items-center gap-2 border-b bg-orange-50 px-5 py-3">
-          <PackageX className="h-4 w-4 text-orange-700" />
-          <h2 className="text-sm font-semibold text-orange-800">Devolução de Produto</h2>
-        </div>
-        <div className="p-5 space-y-3">
-          {devolucoes.length > 0 && (
-            <div className="space-y-2">
-              {devolucoes.map((d) => {
-                const cfg = {
-                  aberta: { label: "Aguardando chegada", icon: PackageX, cls: "bg-amber-50 text-amber-700 border-amber-200" },
-                  recebida: { label: "Recebida — aguardando fechamento", icon: PackageOpen, cls: "bg-blue-50 text-blue-700 border-blue-200" },
-                  concluida: { label: "Concluída", icon: PackageCheck, cls: "bg-green-50 text-green-700 border-green-200" },
-                  cancelada: { label: "Cancelada", icon: X, cls: "bg-muted text-muted-foreground border-border" },
-                }[d.status];
-                const Icon = cfg.icon;
-                return (
-                  <Link
-                    key={d.id}
-                    to="/sac/devolucoes"
-                    className="flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-background px-3 py-2 text-sm hover:bg-muted"
-                  >
-                    <span className={cn("inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-medium", cfg.cls)}>
-                      <Icon className="h-3 w-3" />{cfg.label}
-                    </span>
-                    <span className="text-xs font-semibold text-gold">Ver na tela de Devoluções →</span>
-                  </Link>
-                );
-              })}
-            </div>
-          )}
-          <div className="flex flex-wrap items-center gap-2">
-            <select
-              value={motivoDevolucao}
-              onChange={(e) => setMotivoDevolucao(e.target.value as typeof motivoDevolucao)}
-              aria-label="Motivo da devolução"
-              className="rounded-lg border bg-background px-3 py-2 text-sm"
-            >
-              <option value="devolucao_total">Devolução Total</option>
-              <option value="devolucao_parcial">Devolução Parcial</option>
-            </select>
-            <input
-              value={obsDevolucao}
-              onChange={(e) => setObsDevolucao(e.target.value)}
-              placeholder="Observação (opcional)"
-              className="min-w-[180px] flex-1 rounded-lg border bg-background px-3 py-2 text-sm"
-            />
-            <button
-              type="button"
-              onClick={abrirDevolucao}
-              disabled={abrindoDevolucao}
-              className="inline-flex items-center gap-2 rounded-lg bg-orange-600 px-4 py-2 text-sm font-medium text-white hover:bg-orange-700 disabled:opacity-60"
-            >
-              <PlusCircle className="h-4 w-4" /> {abrindoDevolucao ? "Abrindo..." : "Abrir devolução deste pedido"}
-            </button>
-          </div>
-          <p className="text-xs text-muted-foreground">
-            Abre a devolução com o valor da NF ({fmt(nf.valor_total ?? 0)}) como prejuízo estimado. O recebimento físico e o fechamento acontecem na tela dedicada{" "}
-            <Link to="/sac/devolucoes" className="text-gold hover:underline">Devoluções de Produto</Link>.
-          </p>
-        </div>
-      </div>
+      <ContatoPanel
+        nf={nf}
+        contato={contato}
+        onContatoChange={setContato}
+        savingContato={savingContato}
+        msgContato={msgContato}
+        onSalvarContato={salvarContato}
+      />
 
-      {/* Informações — campos de contato editáveis */}
-      <div className="rounded-xl border bg-muted/30 p-4 space-y-3 text-sm">
-        <div className="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-4">
-          <div>
-            <span className="text-muted-foreground text-xs block mb-0.5">Transportadora</span>
-            <span>{nf.transportadora ?? "—"}</span>
-          </div>
-          <div>
-            <span className="text-muted-foreground text-xs block mb-0.5">Rastreio</span>
-            <span className="font-mono text-xs">{nf.codigo_rastreio ?? "—"}</span>
-          </div>
-          <div>
-            <span className="text-muted-foreground text-xs block mb-0.5">Previsão entrega</span>
-            <span>{fmtDate(nf.previsao_entrega)}</span>
-          </div>
-          <div>
-            <label className="text-muted-foreground text-xs block mb-0.5">Contato</label>
-            <input type="text" value={contato.contato_nome}
-              onChange={(e) => setContato((p) => ({ ...p, contato_nome: e.target.value }))}
-              placeholder="Nome do contato"
-              className="w-full rounded-md border bg-background px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-ring" />
-          </div>
-          <div>
-            <label className="text-muted-foreground text-xs block mb-0.5">WhatsApp</label>
-            <input type="tel" value={contato.whatsapp}
-              onChange={(e) => setContato((p) => ({ ...p, whatsapp: e.target.value }))}
-              placeholder="55 11 9xxxx-xxxx"
-              className="w-full rounded-md border bg-background px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-ring" />
-          </div>
-          <div className="sm:col-span-2">
-            <label className="text-muted-foreground text-xs block mb-0.5">E-mail</label>
-            <input type="email" value={contato.email}
-              onChange={(e) => setContato((p) => ({ ...p, email: e.target.value }))}
-              placeholder="email@empresa.com"
-              className="w-full rounded-md border bg-background px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-ring" />
-          </div>
-        </div>
-        <div className="flex flex-wrap items-center gap-2 pt-1 border-t">
-          {contato.whatsapp && (
-            <Link to="/whatsapp-threads"
-              className="inline-flex items-center gap-1.5 rounded-lg bg-green-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-green-700">
-              <MessageCircle className="h-3.5 w-3.5" /> Conversar no WhatsApp
-            </Link>
-          )}
-          {contato.whatsapp && (
-            <a href={`tel:${contato.whatsapp}`}
-              className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium hover:bg-muted">
-              <Phone className="h-3.5 w-3.5" /> Ligar
-            </a>
-          )}
-          <button onClick={salvarContato} disabled={savingContato}
-            className="ml-auto inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium hover:bg-muted disabled:opacity-50">
-            <Save className="h-3.5 w-3.5" />{savingContato ? "Salvando..." : "Salvar contato"}
-          </button>
-          {msgContato && <span className="text-xs text-muted-foreground">{msgContato}</span>}
-        </div>
-      </div>
+      <ConferenciaPanel
+        itensOmie={itensOmie}
+        obsOmieNota={nf.obs_omie}
+        conferencias={conferencias}
+        onConferenciaChange={(idx, v) => {
+          setConferencias((prev) => ({ ...prev, [idx]: v }));
+          if (divergenciaReportada) setDivergenciaReportada(false);
+        }}
+        fotosConferencia={fotosConferencia}
+        uploadingFoto={uploadingFoto}
+        onUploadFoto={(idx, file) => void uploadFotoConferencia(idx, file)}
+        onRemoverFoto={removerFotoConferencia}
+        enviandoFotoItem={enviandoFotoItem}
+        msgFotoItem={msgFotoItem}
+        fotoItemPublicada={fotoItemPublicada}
+        onEnviarFotoOmieItem={(idx) => void enviarFotoOmieItem(idx)}
+        codigoPedidoOmie={nf.codigo_pedido_omie}
+        temDivergencia={temDivergencia}
+        todasPreenchidas={todasPreenchidas}
+        divergenciaReportada={divergenciaReportada}
+        obsDiv={obsDiv}
+        onObsDivChange={setObsDiv}
+        reportandoDiv={reportandoDiv}
+        msgDiv={msgDiv}
+        onReportarDivergencia={reportarDivergencia}
+      />
 
-      {/* ─── POKA-YOKE: CONFERÊNCIA DE ITENS ─── */}
-      {itensOmie.length > 0 && (
-        <div className="rounded-xl border bg-card overflow-hidden">
-          <div className="flex items-center gap-2 border-b bg-purple-50 px-5 py-3">
-            <ClipboardList className="h-4 w-4 text-purple-700" />
-            <h2 className="text-sm font-semibold text-purple-800">Conferência de Itens — Poka-Yoke</h2>
-            <span className="ml-auto text-xs text-muted-foreground">
-              {Object.values(conferencias).filter((v) => v != null).length} / {itensOmie.length} conferidos
-            </span>
-          </div>
-          <div className="p-5 space-y-3">
-            {/* Obs vendedor/cliente */}
-            {nf.obs_omie && (
-              <div className="text-xs bg-amber-50 border border-amber-200 rounded-lg p-3">
-                <span className="font-medium text-amber-700">Obs. vendedor/cliente: </span>
-                <span className="text-amber-900">{nf.obs_omie}</span>
-              </div>
-            )}
-            {/* Cabeçalho da tabela */}
-            <div className="grid grid-cols-[1fr_72px_88px_44px] gap-2 text-[10px] font-medium text-muted-foreground uppercase tracking-wide pb-1 border-b">
-              <span>Produto</span>
-              <span className="text-center">Pedido</span>
-              <span className="text-center">Conferido</span>
-              <span />
-            </div>
-            {/* Itens */}
-            {itensOmie.map((item, i) => {
-              const qtdPedida = item.produto?.quantidade ?? 0;
-              const qtdConf = conferencias[i];
-              const preenchido = qtdConf != null;
-              const ok = preenchido && qtdConf === qtdPedida;
-              const div = preenchido && qtdConf !== qtdPedida;
-              return (
-                <div key={i} className="py-2 border-b last:border-0 space-y-2">
-                  <div className="grid grid-cols-[1fr_72px_88px_44px] gap-2 items-center">
-                    <div>
-                      <p className="text-sm font-medium leading-tight">{item.produto?.descricao ?? `Item ${i + 1}`}</p>
-                      {item.produto?.codigo_produto && (
-                        <p className="text-[11px] text-muted-foreground font-mono">SKU {item.produto.codigo_produto}</p>
-                      )}
-                    </div>
-                    <span className="text-center text-sm tabular-nums">{qtdPedida}</span>
-                    <input
-                      type="number"
-                      min={0}
-                      value={qtdConf ?? ""}
-                      placeholder="—"
-                      onChange={(e) => {
-                        const v = e.target.value === "" ? null : Number(e.target.value);
-                        setConferencias((prev) => ({ ...prev, [i]: v }));
-                        if (divergenciaReportada) setDivergenciaReportada(false);
-                      }}
-                      className={cn(
-                        "w-full rounded-lg border px-2 py-1.5 text-sm text-center tabular-nums focus:outline-none focus:ring-1",
-                        ok && "border-green-400 bg-green-50 text-green-800 focus:ring-green-400",
-                        div && "border-red-400 bg-red-50 text-red-800 focus:ring-red-400",
-                        !preenchido && "border-border bg-background focus:ring-ring"
-                      )}
-                    />
-                    <div className="flex justify-center">
-                      {ok && <CheckCircle2 className="h-5 w-5 text-green-500" />}
-                      {div && <AlertTriangle className="h-5 w-5 text-red-500" />}
-                    </div>
-                  </div>
-                  {/* Foto do item conferido */}
-                  <div className="pl-0">
-                    {fotosConferencia[i] ? (
-                      <div className="flex items-center gap-3">
-                        <div className="relative inline-block">
-                          <a href={fotosConferencia[i]!} target="_blank" rel="noopener noreferrer">
-                            <img src={fotosConferencia[i]!} alt={`Foto item ${i + 1}`}
-                              className="h-20 w-28 rounded-lg border object-cover hover:opacity-90 transition-opacity" />
-                          </a>
-                          <button onClick={() => removerFotoConferencia(i)}
-                            className="absolute -top-1.5 -right-1.5 rounded-full bg-red-500 p-0.5 text-white hover:bg-red-600">
-                            <X className="h-3 w-3" />
-                          </button>
-                        </div>
-                        <div className="flex flex-col gap-1">
-                          <button
-                            onClick={() => void enviarFotoOmieItem(i)}
-                            disabled={enviandoFotoItem[i] || !nf.codigo_pedido_omie}
-                            className={cn(
-                              "inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors disabled:opacity-50",
-                              fotoItemPublicada[i]
-                                ? "bg-green-50 text-green-700 border border-green-200"
-                                : "bg-orange-600 text-white hover:bg-orange-700"
-                            )}
-                            title={!nf.codigo_pedido_omie ? "NF sem pedido Omie vinculado" : undefined}
-                          >
-                            {fotoItemPublicada[i] ? <CheckCircle2 className="h-3.5 w-3.5" /> : <Send className="h-3.5 w-3.5" />}
-                            {enviandoFotoItem[i]
-                              ? "Publicando..."
-                              : fotoItemPublicada[i]
-                              ? "Publicada no Omie"
-                              : "Publicar Imagem no Omie"}
-                          </button>
-                          {msgFotoItem[i] && !fotoItemPublicada[i] && (
-                            <span className="text-[11px] text-red-600">{msgFotoItem[i]}</span>
-                          )}
-                        </div>
-                      </div>
-                    ) : (
-                      <label className={cn(
-                        "inline-flex items-center gap-1.5 cursor-pointer rounded-lg border border-dashed px-3 py-1.5 text-xs text-muted-foreground hover:bg-muted transition-colors",
-                        uploadingFoto[i] && "opacity-50 pointer-events-none"
-                      )}>
-                        <Camera className="h-3.5 w-3.5" />
-                        {uploadingFoto[i] ? "Enviando..." : "Foto do item"}
-                        <input type="file" accept="image/*" capture="environment" className="hidden"
-                          onChange={(e) => { const f = e.target.files?.[0]; if (f) void uploadFotoConferencia(i, f); }} />
-                      </label>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-            {/* Bloco de divergência */}
-            {temDivergencia && (
-              <div className={cn(
-                "rounded-lg border p-3 space-y-2",
-                divergenciaReportada ? "border-amber-300 bg-amber-50" : "border-red-300 bg-red-50"
-              )}>
-                {!divergenciaReportada ? (
-                  <>
-                    <p className="text-sm font-medium text-red-800 flex items-center gap-1.5">
-                      <AlertTriangle className="h-4 w-4" /> Divergência detectada — reporte antes de salvar
-                    </p>
-                    <textarea
-                      rows={2}
-                      value={obsDiv}
-                      onChange={(e) => setObsDiv(e.target.value)}
-                      placeholder="Descreva a divergência (opcional)"
-                      className="w-full rounded-lg border bg-white px-3 py-2 text-sm resize-none focus:outline-none focus:ring-1 focus:ring-red-400"
-                    />
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={reportarDivergencia}
-                        disabled={reportandoDiv}
-                        className="inline-flex items-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50"
-                      >
-                        <Send className="h-4 w-4" />
-                        {reportandoDiv ? "Reportando..." : "Reportar Divergência"}
-                      </button>
-                      {msgDiv && <span className="text-xs text-muted-foreground">{msgDiv}</span>}
-                    </div>
-                  </>
-                ) : (
-                  <p className="text-sm text-amber-800 flex items-center gap-1.5">
-                    <CheckCircle2 className="h-4 w-4 text-amber-600" />
-                    Divergência reportada — time notificado. Pode salvar com ressalva.
-                  </p>
-                )}
-              </div>
-            )}
-            {/* Tudo OK */}
-            {todasPreenchidas && !temDivergencia && (
-              <div className="rounded-lg border border-green-300 bg-green-50 p-3 flex items-center gap-2">
-                <CheckCircle2 className="h-4 w-4 text-green-600" />
-                <span className="text-sm text-green-800 font-medium">Todos os itens conferidos — expedição liberada.</span>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
+      <ExpedicaoPanel
+        exp={exp}
+        onExpChange={handleExpChange}
+        statusCalculado={calcularStatusEntrega()}
+        savingExp={savingExp}
+        msgExp={msgExp}
+        onSalvarExpedicao={salvarExpedicao}
+      />
 
-      {/* ─── SEÇÃO 1: EXPEDIÇÃO ─── */}
-      <div className="rounded-xl border bg-card overflow-hidden">
-        <div className="flex items-center gap-2 border-b bg-amber-50 px-5 py-3">
-          <Truck className="h-4 w-4 text-amber-700" />
-          <h2 className="text-sm font-semibold text-amber-800">Expedição — Confirmação de Entrega</h2>
-        </div>
-        <div className="p-5 space-y-4">
-          {/* Linha 1: Status + Tipo de entrega */}
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <div>
-              <label className="block text-xs font-medium text-muted-foreground mb-1">Status da entrega</label>
-              {(() => {
-                const s = calcularStatusEntrega();
-                const cfg = STATUS_CONFIG[s];
-                const Icon = cfg.icon;
-                return (
-                  <div className={cn("flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium", cfg.cls)}>
-                    <Icon className="h-4 w-4 shrink-0" />
-                    {cfg.label}
-                    <span className="ml-auto text-xs opacity-60">calculado automaticamente</span>
-                  </div>
-                );
-              })()}
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-muted-foreground mb-1">Tipo de entrega</label>
-              <select value={exp.tipo_entrega}
-                onChange={(e) => setExp((p) => ({ ...p, tipo_entrega: e.target.value as typeof p.tipo_entrega }))}
-                className="w-full rounded-lg border bg-background px-3 py-2 text-sm">
-                <option value="TRANSPORTADORA">Transportadora</option>
-                <option value="ENTREGA_PROPRIA">Entrega própria (VerticalParts)</option>
-                <option value="RETIRADA_CLIENTE">Retirada pelo cliente</option>
-              </select>
-            </div>
-          </div>
+      <ObsOmiePanel
+        obsOmie={obsOmie}
+        onObsOmieChange={setObsOmie}
+        savingObs={savingObs}
+        msgObs={msgObs}
+        onEnviarObsOmie={enviarObsOmie}
+      />
 
-          {/* Campos condicionais por tipo */}
-          {exp.tipo_entrega === "TRANSPORTADORA" && (
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div>
-                <label className="block text-xs font-medium text-muted-foreground mb-1">Transportadora</label>
-                <input type="text" value={exp.transportadora} placeholder="Ex.: Correios, Jadlog, Sequoia…"
-                  onChange={(e) => setExp((p) => ({ ...p, transportadora: e.target.value }))}
-                  className="w-full rounded-lg border bg-background px-3 py-2 text-sm" />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-muted-foreground mb-1">Código de rastreio</label>
-                <div className="flex gap-2">
-                  <input type="text" value={exp.codigo_rastreio} placeholder="Ex.: AA123456789BR"
-                    onChange={(e) => setExp((p) => ({ ...p, codigo_rastreio: e.target.value.toUpperCase() }))}
-                    className="flex-1 rounded-lg border bg-background px-3 py-2 text-sm font-mono" />
-                  {exp.codigo_rastreio && (
-                    <a href={`https://rastreamento.correios.com.br/app/index.php?objetos=${exp.codigo_rastreio}`}
-                      target="_blank" rel="noreferrer"
-                      className="inline-flex items-center gap-1 rounded-lg border px-3 py-2 text-xs font-medium hover:bg-muted shrink-0">
-                      Rastrear
-                    </a>
-                  )}
-                </div>
-              </div>
-            </div>
-          )}
+      <FotosConferenciaOmiePanel
+        fotosConferencia={fotosConferencia}
+        itensOmie={itensOmie}
+        enviandoFotosOmie={enviandoFotosOmie}
+        msgFotosOmie={msgFotosOmie}
+        onEnviarFotosOmie={enviarFotosOmie}
+      />
 
-          {exp.tipo_entrega === "RETIRADA_CLIENTE" && (
-            <div>
-              <label className="block text-xs font-medium text-muted-foreground mb-1">Quem retirou</label>
-              <input type="text" value={exp.retirado_por} placeholder="Nome completo e documento (RG/CPF)"
-                onChange={(e) => setExp((p) => ({ ...p, retirado_por: e.target.value }))}
-                className="w-full rounded-lg border bg-background px-3 py-2 text-sm" />
-            </div>
-          )}
+      <SacPanel
+        sac={sac}
+        onSacChange={setSac}
+        savingSac={savingSac}
+        msgSac={msgSac}
+        onSalvarSac={salvarSac}
+      />
 
-          {/* Datas + comprovante */}
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <div>
-              <label className="block text-xs font-medium text-muted-foreground mb-1">
-                {exp.tipo_entrega === "RETIRADA_CLIENTE" ? "Data da retirada" : "Data coleta / retirada"}
-              </label>
-              <input type="date" value={exp.data_coleta}
-                onChange={(e) => setExp((p) => ({ ...p, data_coleta: e.target.value }))}
-                className="w-full rounded-lg border bg-background px-3 py-2 text-sm" />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-muted-foreground mb-1">Data de entrega real</label>
-              <input type="date" value={exp.data_entrega_real}
-                onChange={(e) => {
-                  const val = e.target.value;
-                  setExp((p) => ({ ...p, data_entrega_real: val }));
-                  if (val) {
-                    setSac((p) => ({ ...p, previsao_pos_venda: addBusinessDays(val, 3) }));
-                  }
-                }}
-                className="w-full rounded-lg border bg-background px-3 py-2 text-sm" />
-            </div>
-            <div className="sm:col-span-2">
-              <label className="block text-xs font-medium text-muted-foreground mb-1">Comprovante de entrega</label>
-              <input type="text" value={exp.comprovante_entrega} placeholder="Código, protocolo ou observação"
-                onChange={(e) => setExp((p) => ({ ...p, comprovante_entrega: e.target.value }))}
-                className="w-full rounded-lg border bg-background px-3 py-2 text-sm" />
-            </div>
-          </div>
-
-          {exp.tipo_entrega === "TRANSPORTADORA" && (
-            <div>
-              <label className="block text-xs font-medium text-muted-foreground mb-2">Transportadora entregou?</label>
-              <SimNao value={exp.transportadora_entregou}
-                onChange={(v) => setExp((p) => ({ ...p, transportadora_entregou: v }))} />
-            </div>
-          )}
-          <div className="flex items-center gap-3 border-t pt-4">
-            <button onClick={salvarExpedicao} disabled={savingExp}
-              className="inline-flex items-center gap-2 rounded-lg bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-700 disabled:opacity-50">
-              <Save className="h-4 w-4" />{savingExp ? "Salvando..." : "Salvar Expedição"}
-            </button>
-            {msgExp && <span className="text-sm text-muted-foreground">{msgExp}</span>}
-          </div>
-        </div>
-      </div>
-
-      {/* ─── SEÇÃO 1b: OBSERVAÇÕES PARA OMIE ─── */}
-      <div className="rounded-xl border border-orange-200 bg-card overflow-hidden">
-        <div className="flex items-center gap-2 border-b bg-orange-50 px-5 py-3">
-          <Send className="h-4 w-4 text-orange-600" />
-          <h2 className="text-sm font-semibold text-orange-800">Observações → Omie</h2>
-          <span className="ml-auto text-[11px] text-orange-500 font-medium">Enviado ao pedido no ERP</span>
-        </div>
-        <div className="p-5 space-y-3">
-          <p className="text-xs text-muted-foreground">
-            O texto abaixo será <strong>anexado</strong> ao campo Observações do pedido no Omie (aba Observações da Proposta Comercial).
-            Campos internos do pós-venda ficam apenas no site.
-          </p>
-          <textarea
-            rows={4}
-            value={obsOmie}
-            onChange={(e) => setObsOmie(e.target.value)}
-            placeholder={"Ex.: EXP confirmou entrega em 12/06/2026. Cliente recebeu e assinou comprovante."}
-            className="w-full rounded-lg border bg-background px-3 py-2 text-sm resize-none focus:outline-none focus:ring-1 focus:ring-orange-400"
-          />
-          <div className="flex items-center gap-3">
-            <button
-              onClick={enviarObsOmie}
-              disabled={savingObs || !obsOmie.trim()}
-              className="inline-flex items-center gap-2 rounded-lg bg-orange-600 px-4 py-2 text-sm font-medium text-white hover:bg-orange-700 disabled:opacity-50"
-            >
-              <Send className="h-4 w-4" />
-              {savingObs ? "Enviando..." : "Enviar para Omie"}
-            </button>
-            {msgObs && (
-              <span className={cn("text-sm", msgObs.startsWith("Erro") ? "text-red-600" : "text-green-600")}>
-                {msgObs}
-              </span>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* ─── FOTOS DA CONFERÊNCIA → OMIE ─── */}
-      {Object.values(fotosConferencia).some((v) => v != null) && (
-        <div className="rounded-xl border bg-card overflow-hidden">
-          <div className="flex items-center gap-2 border-b bg-orange-50 px-5 py-3">
-            <Camera className="h-4 w-4 text-orange-700" />
-            <h2 className="text-sm font-semibold text-orange-800">Fotos da Conferência → Omie</h2>
-            <span className="ml-auto text-[11px] text-orange-500 font-medium">
-              {Object.values(fotosConferencia).filter((v) => v != null).length} foto(s) prontas
-            </span>
-          </div>
-          <div className="p-5 space-y-3">
-            <p className="text-xs text-muted-foreground">
-              As fotos abaixo serão enviadas como <strong>anexos</strong> ao pedido no Omie (aba Anexos da Proposta Comercial).
-            </p>
-            <div className="flex flex-wrap gap-2">
-              {Object.entries(fotosConferencia).filter(([, url]) => url != null).map(([idx, url]) => {
-                const item = itensOmie[Number(idx)];
-                return (
-                  <div key={idx} className="relative">
-                    <a href={url!} target="_blank" rel="noopener noreferrer">
-                      <img src={url!} alt={item?.produto?.descricao ?? `Item ${idx}`}
-                        className="h-16 w-20 rounded-lg border object-cover hover:opacity-90 transition-opacity" />
-                    </a>
-                    <p className="text-[10px] text-muted-foreground text-center mt-0.5 max-w-[80px] truncate">
-                      {item?.produto?.descricao ?? `Item ${idx}`}
-                    </p>
-                  </div>
-                );
-              })}
-            </div>
-            <div className="flex items-center gap-3">
-              <button
-                onClick={enviarFotosOmie}
-                disabled={enviandoFotosOmie}
-                className="inline-flex items-center gap-2 rounded-lg bg-orange-600 px-4 py-2 text-sm font-medium text-white hover:bg-orange-700 disabled:opacity-50">
-                <Camera className="h-4 w-4" />
-                {enviandoFotosOmie ? "Enviando..." : "Enviar fotos ao Omie"}
-              </button>
-              {msgFotosOmie && (
-                <span className={cn("text-sm", msgFotosOmie.startsWith("Erro") ? "text-red-600" : "text-green-600")}>
-                  {msgFotosOmie}
-                </span>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ─── SEÇÃO 2: CONTROLE SAC ─── */}
-      <div className="rounded-xl border bg-card overflow-hidden">
-        <div className="flex items-center gap-2 border-b bg-blue-50 px-5 py-3">
-          <MessageCircle className="h-4 w-4 text-blue-700" />
-          <h2 className="text-sm font-semibold text-blue-800">SAC — Controle de Pós-Venda</h2>
-        </div>
-        <div className="p-5 space-y-4">
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-            <div>
-              <label className="block text-xs font-medium text-muted-foreground mb-1">Previsão do contato SAC</label>
-              <input type="date" value={sac.previsao_pos_venda}
-                onChange={(e) => setSac((p) => ({ ...p, previsao_pos_venda: e.target.value }))}
-                className="w-full rounded-lg border bg-background px-3 py-2 text-sm" />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-muted-foreground mb-1">Status pós-venda</label>
-              <select value={sac.status_pos_venda}
-                onChange={(e) => setSac((p) => ({ ...p, status_pos_venda: e.target.value as "PENDENTE" | "EM_ANDAMENTO" | "CONCLUIDO" }))}
-                className="w-full rounded-lg border bg-background px-3 py-2 text-sm">
-                <option value="PENDENTE">Pendente</option>
-                <option value="EM_ANDAMENTO">Em andamento</option>
-                <option value="CONCLUIDO">Concluído</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-muted-foreground mb-1">Data do contato</label>
-              <input type="date" value={sac.data_pos_venda}
-                onChange={(e) => setSac((p) => ({ ...p, data_pos_venda: e.target.value }))}
-                className="w-full rounded-lg border bg-background px-3 py-2 text-sm" />
-            </div>
-            <div className="sm:col-span-3">
-              <label className="block text-xs font-medium text-muted-foreground mb-1">Responsável pelo contato</label>
-              <input type="text" value={sac.responsavel_pos_venda} placeholder="Nome de quem fez o contato"
-                onChange={(e) => setSac((p) => ({ ...p, responsavel_pos_venda: e.target.value }))}
-                className="w-full rounded-lg border bg-background px-3 py-2 text-sm" />
-            </div>
-          </div>
-          <div className="flex items-center gap-3 border-t pt-4">
-            <button onClick={salvarSac} disabled={savingSac}
-              className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50">
-              <Save className="h-4 w-4" />{savingSac ? "Salvando..." : "Salvar SAC"}
-            </button>
-            {msgSac && <span className="text-sm text-muted-foreground">{msgSac}</span>}
-          </div>
-        </div>
-      </div>
-
-      {/* ─── SEÇÃO 3: PESQUISA DE SATISFAÇÃO ─── */}
-      <div className="rounded-xl border bg-card overflow-hidden">
-        <div className="flex items-center gap-2 border-b bg-green-50 px-5 py-3">
-          <CheckCircle2 className="h-4 w-4 text-green-700" />
-          <h2 className="text-sm font-semibold text-green-800">Pesquisa de Satisfação</h2>
-          <span className="ml-auto text-xs text-muted-foreground">
-            {pesquisa?.respondida_em ? `Preenchida em ${fmtDate(pesquisa.respondida_em)}` : "Não preenchida ainda"}
-          </span>
-        </div>
-        <div className="p-5 space-y-5">
-
-          {/* Perguntas Sim/Não */}
-          {([
-            { key: "produto_correto",             label: "O produto chegou correto?" },
-            { key: "atendeu_prazo",               label: "Atendeu o prazo de entrega?" },
-            { key: "recebeu_nota_boleto",          label: "Recebeu a nota fiscal e boleto?" },
-            { key: "produto_atendeu_expectativas", label: "O produto atendeu as expectativas?" },
-            { key: "dificuldade_compra",           label: "Teve dificuldade na compra?" },
-            { key: "compraria_novamente",          label: "Compraria novamente?" },
-          ] as { key: keyof typeof pesq; label: string }[]).map(({ key, label }) => (
-            <div key={key} className="flex items-center justify-between gap-4 border-b pb-4 last:border-0 last:pb-0">
-              <span className="text-sm font-medium">{label}</span>
-              <SimNao value={pesq[key] as boolean | null}
-                onChange={(v) => setPesq((p) => ({ ...p, [key]: v }))} />
-            </div>
-          ))}
-
-          {/* Avaliação atendimento */}
-          <div className="flex items-center justify-between gap-4 border-b pb-4">
-            <span className="text-sm font-medium">Avaliação do atendimento</span>
-            <Estrelas value={pesq.avaliacao_atendimento}
-              onChange={(v) => setPesq((p) => ({ ...p, avaliacao_atendimento: v }))} />
-          </div>
-
-          {/* NPS */}
-          <div className="border-b pb-4">
-            <label className="block text-sm font-medium mb-2">
-              NPS — De 0 a 10, quanto indicaria a VerticalParts?
-              {pesq.nps_score !== null && <span className="ml-2 font-bold text-primary">{pesq.nps_score}</span>}
-            </label>
-            <div className="flex gap-1 flex-wrap">
-              {Array.from({ length: 11 }, (_, i) => (
-                <button key={i} type="button" onClick={() => setPesq((p) => ({ ...p, nps_score: i }))}
-                  className={cn("h-9 w-9 rounded-lg border text-sm font-semibold transition-all",
-                    pesq.nps_score === i
-                      ? i >= 9 ? "bg-green-500 text-white border-green-500"
-                        : i >= 7 ? "bg-amber-400 text-white border-amber-400"
-                        : "bg-red-500 text-white border-red-500"
-                      : "hover:bg-muted")}>
-                  {i}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Campos de texto */}
-          {([
-            { key: "pontos_positivos", label: "Pontos positivos da experiência" },
-            { key: "pontos_melhoria",  label: "Algo a melhorar?" },
-            { key: "sugestoes",        label: "Alguma sugestão?" },
-            { key: "observacoes",      label: "Observações gerais" },
-          ] as { key: keyof typeof pesq; label: string }[]).map(({ key, label }) => (
-            <div key={key}>
-              <label className="block text-xs font-medium text-muted-foreground mb-1">{label}</label>
-              <textarea rows={2} value={(pesq[key] as string) ?? ""}
-                onChange={(e) => setPesq((p) => ({ ...p, [key]: e.target.value }))}
-                className="w-full rounded-lg border bg-background px-3 py-2 text-sm resize-none" />
-            </div>
-          ))}
-
-          <div className="flex items-center gap-3 border-t pt-4">
-            <button onClick={salvarPesquisa} disabled={savingPesq}
-              className="inline-flex items-center gap-2 rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50">
-              <Save className="h-4 w-4" />{savingPesq ? "Salvando..." : "Salvar Pesquisa"}
-            </button>
-            {msgPesq && <span className="text-sm text-muted-foreground">{msgPesq}</span>}
-          </div>
-        </div>
-      </div>
-
+      <PesquisaPanel
+        pesq={pesq}
+        onPesqChange={setPesq}
+        respondidaEm={pesquisa?.respondida_em}
+        savingPesq={savingPesq}
+        msgPesq={msgPesq}
+        onSalvarPesquisa={salvarPesquisa}
+      />
     </div>
   );
 }
