@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import * as notasFiscaisRepo from "@/lib/repositories/notasFiscaisRepo";
 import { cn } from "@/lib/utils";
 import { Package, Clock, CheckCircle2, AlertTriangle, RefreshCw, ExternalLink, Search, X, CheckCircle, XCircle, History } from "lucide-react";
 import { Link } from "@tanstack/react-router";
@@ -68,12 +68,7 @@ export default function SacPipeline() {
     // já concluiu as duas fica na tela /sac/concluidos — não aqui. Sem
     // limite artificial: antes um .limit(200) escondia silenciosamente
     // qualquer pendência mais antiga que as 200 NFs mais recentes.
-    const { data } = await supabase
-      .from("sac_notas_fiscais")
-      .select("id,nf_numero,chave_nfe,numero_pedido_omie,razao_social_cliente,classe_abc,valor_total,data_emissao,previsao_entrega,status_entrega,status_pos_venda,transportadora,codigo_rastreio,pesquisa_enviada,faturado,data_faturamento")
-      .or("status_entrega.neq.ENTREGUE,status_pos_venda.neq.CONCLUIDO")
-      .order("data_emissao", { ascending: false })
-      .limit(1000);
+    const { data } = await notasFiscaisRepo.listPendentes();
     setNfs((data as SacNF[]) ?? []);
     setLoading(false);
   }

@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import * as notasFiscaisRepo from "@/lib/repositories/notasFiscaisRepo";
 import { cn } from "@/lib/utils";
 import { ExternalLink, Search, X, ArrowLeft } from "lucide-react";
 import { Link } from "@tanstack/react-router";
@@ -40,13 +40,7 @@ export default function SacConcluidos() {
     setLoading(true);
     // Aqui não precisa sincronizar faturamento com o Omie — é histórico de
     // quem já concluiu as duas trilhas (Entrega e SAC), não muda mais.
-    const { data } = await supabase
-      .from("sac_notas_fiscais")
-      .select("id,nf_numero,chave_nfe,numero_pedido_omie,razao_social_cliente,classe_abc,valor_total,data_emissao,data_entrega_real,data_pos_venda,responsavel_pos_venda,pesquisa_enviada")
-      .eq("status_entrega", "ENTREGUE")
-      .eq("status_pos_venda", "CONCLUIDO")
-      .order("data_pos_venda", { ascending: false })
-      .limit(1000);
+    const { data } = await notasFiscaisRepo.listConcluidas();
     setNfs((data as SacNF[]) ?? []);
     setLoading(false);
   }
