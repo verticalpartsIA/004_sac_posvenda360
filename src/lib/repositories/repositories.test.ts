@@ -111,6 +111,8 @@ const auditLogRepo = await import("./auditLogRepo");
 const sacClientesRepo = await import("./sacClientesRepo");
 const conferenciaStorageRepo = await import("./conferenciaStorageRepo");
 const whatsappMessagesRepo = await import("./whatsappMessagesRepo");
+const userRolesRepo = await import("./userRolesRepo");
+const profilesRepo = await import("./profilesRepo");
 
 describe("notasFiscaisRepo", () => {
   it("getDetalhe busca pelo id, com join de sac_clientes", () => {
@@ -208,6 +210,26 @@ describe("devolucoesRepo", () => {
     expect(table).toBe("sac_devolucoes");
     expect(ops).toEqual([["insert", [{ nf_id: "nf-1", motivo: "devolucao_total" }]]]);
   });
+
+  it("listAll traz o join com sac_notas_fiscais, mais recentes primeiro, até 300", () => {
+    devolucoesRepo.listAll();
+    const [{ table, ops }] = fromCalls;
+    expect(table).toBe("sac_devolucoes");
+    expect(ops[0][0]).toBe("select");
+    expect(ops[0][1][0] as string).toContain(
+      "sac_notas_fiscais(nf_numero,numero_pedido_omie,razao_social_cliente)",
+    );
+    expect(ops[1]).toEqual(["order", ["aberta_em", { ascending: false }]]);
+    expect(ops[2]).toEqual(["limit", [300]]);
+  });
+
+  it("update filtra pelo id da devolução", () => {
+    devolucoesRepo.update("dev-1", { status: "concluida" });
+    const [{ table, ops }] = fromCalls;
+    expect(table).toBe("sac_devolucoes");
+    expect(ops[0]).toEqual(["update", [{ status: "concluida" }]]);
+    expect(ops[1]).toEqual(["eq", ["id", "dev-1"]]);
+  });
 });
 
 describe("auditLogRepo", () => {
@@ -261,6 +283,53 @@ describe("conferenciaStorageRepo", () => {
     expect(path).toMatch(/^nf-1\/item-2-\d+\.png$/);
     expect(publicUrlCall).toEqual(["getPublicUrl", [path]]);
     expect(publicUrl).toBe(`https://cdn.test/sac-conferencia/${path}`);
+  });
+
+  it("uploadFotoDevolucao sobe no bucket sac-conferencia com a convenção de path de devolução", async () => {
+    const file = { name: "recebimento.jpg" } as File;
+    const { error, publicUrl } = await conferenciaStorageRepo.uploadFotoDevolucao("dev-1", 0, file);
+    expect(error).toBeNull();
+    expect(storageCalls).toHaveLength(2);
+    expect(storageCalls.every((c) => c.bucket === "sac-conferencia")).toBe(true);
+    const [uploadCall] = storageCalls[0].ops;
+    const [path] = uploadCall[1] as [string];
+    expect(path).toMatch(/^devolucao\/dev-1\/\d+-0\.jpg$/);
+    expect(publicUrl).toBe(`https://cdn.test/sac-conferencia/${path}`);
+  });
+});
+
+describe("userRolesRepo", () => {
+  it("listAll ordena por user_id", () => {
+    userRolesRepo.listAll();
+    const [{ table, ops }] = fromCalls;
+    expect(table).toBe("user_roles");
+    expect(ops[0]).toEqual(["select", ["user_id, role"]]);
+    expect(ops[1]).toEqual(["order", ["user_id"]]);
+  });
+
+  it("remove filtra por user_id e role juntos", () => {
+    userRolesRepo.remove("user-1", "gestor");
+    const [{ table, ops }] = fromCalls;
+    expect(table).toBe("user_roles");
+    expect(ops[0][0]).toBe("delete");
+    expect(ops[1]).toEqual(["eq", ["user_id", "user-1"]]);
+    expect(ops[2]).toEqual(["eq", ["role", "gestor"]]);
+  });
+
+  it("add grava o par user_id/role", () => {
+    userRolesRepo.add({ user_id: "user-1", role: "gestor" });
+    const [{ table, ops }] = fromCalls;
+    expect(table).toBe("user_roles");
+    expect(ops).toEqual([["insert", [{ user_id: "user-1", role: "gestor" }]]]);
+  });
+});
+
+describe("profilesRepo", () => {
+  it("listAll não aplica filtro (cruzado com user_roles no componente)", () => {
+    profilesRepo.listAll();
+    const [{ table, ops }] = fromCalls;
+    expect(table).toBe("profiles");
+    expect(ops).toEqual([["select", ["user_id, display_name, departamento"]]]);
   });
 });
 
