@@ -297,5 +297,28 @@ if (!runRlsTests) {
       expect(adminDelete.error).toBeNull();
       expect(adminDelete.data).toEqual([{ user_id: noRole.id, role: "operador" }]);
     });
+
+    // Trava o comportamento que quebrou no auth.tsx do front (todo usuário logado
+    // busca a própria linha em user_roles, com o client autenticado/anon — se essa
+    // policy ficar restrita só a admin, todo não-admin passa a "não ter papel
+    // nenhum" no app, silenciosamente, sem erro).
+    it("a non-admin user can read their own user_roles row, but not someone else's", async () => {
+      const operador = users.get("operador")!;
+      const gestor = users.get("gestor")!;
+
+      const ownRow = await operador.client
+        .from("user_roles")
+        .select("user_id, role")
+        .eq("user_id", operador.id);
+      expect(ownRow.error).toBeNull();
+      expect(ownRow.data).toEqual([{ user_id: operador.id, role: "operador" }]);
+
+      const othersRow = await operador.client
+        .from("user_roles")
+        .select("user_id, role")
+        .eq("user_id", gestor.id);
+      expect(othersRow.error).toBeNull();
+      expect(othersRow.data).toEqual([]);
+    });
   });
 }
