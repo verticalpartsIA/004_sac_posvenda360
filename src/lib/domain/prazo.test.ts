@@ -27,6 +27,29 @@ describe("prazoUtilMs", () => {
     const expected = Date.UTC(2026, 7, 3, 21, 0); // 18:00 SP = 21:00 UTC
     expect(prazoUtilMs(start, 660)).toBe(expected);
   });
+
+  // Fecha a lacuna apontada na issue #100: até aqui nenhum teste cruzava um feriado de
+  // verdade (só janela comercial/fim de semana). Os dois casos abaixo confirmam que
+  // prazoUtilMs pula tanto um feriado FIXO quanto um MÓVEL (calculado a partir da Páscoa
+  // em holidaysFor), não só o array estático de dias da semana sem feriado no meio.
+  it("pula um feriado fixo (Natal) além do fim de semana seguinte", () => {
+    // Quinta 24/12/2026 17:30 (SP) + 90min: 30min até 18h de quinta; os 60min restantes
+    // não podem cair na sexta 25/12 (Natal, feriado) nem no fim de semana (26-27/12) →
+    // começam na segunda 28/12 07:00 (SP) → terminam 08:00 (SP) da mesma segunda.
+    const start = Date.UTC(2026, 11, 24, 20, 30); // 17:30 SP quinta = 20:30 UTC
+    const expected = Date.UTC(2026, 11, 28, 11, 0); // 08:00 SP segunda = 11:00 UTC
+    expect(prazoUtilMs(start, 90)).toBe(expected);
+  });
+
+  it("pula um feriado móvel (Corpus Christi, calculado via Páscoa/Computus)", () => {
+    // Corpus Christi 2026 = 04/06 (quinta), 60 dias após a Páscoa (05/04/2026).
+    // Quarta 03/06/2026 17:00 (SP) + 90min: 60min até 18h de quarta; os 30min restantes
+    // pulam a quinta 04/06 (feriado móvel) → começam sexta 05/06 07:00 (SP) → terminam
+    // 07:30 (SP) da mesma sexta.
+    const start = Date.UTC(2026, 5, 3, 20, 0); // 17:00 SP quarta = 20:00 UTC
+    const expected = Date.UTC(2026, 5, 5, 10, 30); // 07:30 SP sexta = 10:30 UTC
+    expect(prazoUtilMs(start, 90)).toBe(expected);
+  });
 });
 
 describe("BUSINESS_HOURS", () => {
