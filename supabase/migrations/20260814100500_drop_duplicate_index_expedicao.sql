@@ -1,0 +1,12 @@
+-- Issue #79 (parte 1/2 — a parte segura) — remove o índice duplicado em expedicao_conferencias.
+-- idx_exp_conf_nf e idx_expedicao_conferencias_nf_id são idênticos (mesma coluna nf_id).
+-- Mantém idx_expedicao_conferencias_nf_id (nome mais descritivo) e derruba o outro.
+--
+-- NÃO incluído aqui (exige revisar antes, ver instruções à parte):
+-- - políticas permissivas duplicadas ("service role full access" aplicada a authenticated)
+-- - os 9 índices "nunca usados" — o próprio achado recomenda validar padrão de uso antes
+--   de dropar (banco jovem, pode ser telas ainda não exercidas).
+--
+-- ⚠️ DROP INDEX CONCURRENTLY também não roda dentro de transação — mesma ressalva do
+-- arquivo de índices de FK: rode direto no SQL Editor, não via `supabase db push`.
+DROP INDEX CONCURRENTLY IF EXISTS public.idx_exp_conf_nf;
