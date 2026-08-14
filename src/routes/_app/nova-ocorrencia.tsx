@@ -67,7 +67,7 @@ const STEPS = [
 function NewTicket() {
   const { clientes: erpClientes, produtos: erpProdutos } = Route.useLoaderData();
   const search = Route.useSearch();
-  const { createTicket, createInternalTicket, tickets } = useStore();
+  const { createTicket, createInternalTicket, tickets, slaConfig } = useStore();
   const navigate = useNavigate();
   const [step, setStep] = useState(1);
   const [channel, setChannel] = useState<TicketChannel>("manual");
@@ -94,7 +94,7 @@ function NewTicket() {
     unitValue: 0,
     reason: "",
     priority: "media" as TicketPriority,
-    slaHours: 48,
+    slaHours: slaConfig.media,
     occurrenceReason: (search.motivo ?? "devolucao_total") as OccurrenceReason,
     responsibleSector: "nao_aplica" as ResponsibleSector,
     origin: "externo" as OccurrenceOrigin,
@@ -510,7 +510,14 @@ function NewTicket() {
 
             <div className="grid gap-3 sm:grid-cols-2">
               <Field label="Prioridade">
-                <select value={form.priority} onChange={(e) => setForm({ ...form, priority: e.target.value as TicketPriority })} className={inputCls}>
+                <select
+                  value={form.priority}
+                  onChange={(e) => {
+                    const priority = e.target.value as TicketPriority;
+                    setForm({ ...form, priority, slaHours: slaConfig[priority] });
+                  }}
+                  className={inputCls}
+                >
                   <option value="baixa">Baixa</option>
                   <option value="media">Média</option>
                   <option value="alta">Alta</option>

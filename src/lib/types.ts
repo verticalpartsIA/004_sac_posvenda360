@@ -163,6 +163,15 @@ export const INTERNAL_DEFAULT_SLA: Record<InternalDepartment, number> = {
   qualidade: 16,
 };
 
+// SLA padrão por prioridade (horas) — usado como fallback se `sla_config` ainda não
+// carregou ou estiver vazio; os valores reais vêm de lá quando disponíveis (ver #90).
+export const DEFAULT_SLA_HOURS: Record<TicketPriority, number> = {
+  baixa: 72,
+  media: 48,
+  alta: 24,
+  critica: 12,
+};
+
 export interface AuditLog {
   id: string;
   at: string;

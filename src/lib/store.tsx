@@ -15,6 +15,7 @@ import * as npsRepo from "@/lib/repositories/npsRepo";
 import * as pesquisasRepo from "@/lib/repositories/pesquisasRepo";
 import * as auditLogRepo from "@/lib/repositories/auditLogRepo";
 import * as sacClientesRepo from "@/lib/repositories/sacClientesRepo";
+import * as slaConfigRepo from "@/lib/repositories/slaConfigRepo";
 import { slaStatus } from "@/lib/domain/sla";
 import { useAuth } from "./auth";
 import type {
@@ -39,7 +40,7 @@ import type {
   TicketPriority,
   TicketStatus,
 } from "./types";
-import { categorizeNps } from "./types";
+import { categorizeNps, DEFAULT_SLA_HOURS } from "./types";
 
 type TicketRow = Tables<"tickets">;
 type InternalTicketRow = Tables<"internal_tickets">;
@@ -586,6 +587,9 @@ interface StoreCtx {
   tickets: Ticket[];
   internalTickets: InternalTicket[];
   npsRecords: NpsRecord[];
+  /** Prazo (horas) por prioridade, de `sla_config` — cai em DEFAULT_SLA_HOURS
+   * enquanto não carrega ou se a tabela não tiver a prioridade (ver #90). */
+  slaConfig: Record<TicketPriority, number>;
   storeReady: boolean;
   currentUser: string;
   globalSearchQuery: string;
@@ -617,6 +621,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [internalTickets, setInternalTickets] = useState<InternalTicket[]>([]);
   const [npsRecords, setNpsRecords] = useState<NpsRecord[]>([]);
+  const [slaConfig, setSlaConfig] = useState<Record<TicketPriority, number>>(DEFAULT_SLA_HOURS);
   const [storeReady, setStoreReady] = useState(false);
   // Busca global do header (AppLayout) — consumida por qualquer página que
   // liste tickets (Dashboard, Ocorrências) pra filtrar em tempo real, sem
@@ -624,7 +629,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [globalSearchQuery, setGlobalSearchQuery] = useState("");
 
   const loadAll = useCallback(async () => {
-    const [ticketsRes, internalRes, messagesRes, auditsRes, npsRes, sacPesquisasRes, clientesRes] =
+    const [ticketsRes, internalRes, messagesRes, auditsRes, npsRes, sacPesquisasRes, clientesRes, slaConfigRes] =
       await Promise.all([
         ticketsRepo.listAll(),
         internalTicketsRepo.listAll(),
@@ -633,6 +638,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         npsRepo.listAll(),
         pesquisasRepo.listRespondidas(),
         sacClientesRepo.listTelefones(),
+        slaConfigRepo.listAll(),
       ]);
 
     if (ticketsRes.error) console.error("[Store] Failed to load tickets", ticketsRes.error);
@@ -646,6 +652,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       console.error("[Store] Failed to load SAC pesquisas", sacPesquisasRes.error);
     if (clientesRes.error)
       console.error("[Store] Failed to load sac_clientes telefones", clientesRes.error);
+    if (slaConfigRes.error)
+      console.error("[Store] Failed to load sla_config", slaConfigRes.error);
 
     const ticketRows = ticketsRes.data ?? [];
     const internalRows = internalRes.data ?? [];
@@ -675,6 +683,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     const mergedNps = [...npsRows.map(mapNpsRecord), ...sacPesquisaRows.map(mapSacPesquisa)].sort(
       (a, b) => new Date(b.surveyDate).getTime() - new Date(a.surveyDate).getTime(),
     );
+
+    if (slaConfigRes.data?.length) {
+      setSlaConfig({
+        ...DEFAULT_SLA_HOURS,
+        ...Object.fromEntries(slaConfigRes.data.map((row) => [row.priority, row.hours])),
+      });
+    }
 
     setTickets(mappedTickets);
     setInternalTickets(mappedInternalTickets);
@@ -1142,6 +1157,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       tickets,
       internalTickets,
       npsRecords,
+      slaConfig,
       storeReady,
       currentUser,
       globalSearchQuery,
@@ -1161,6 +1177,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       tickets,
       internalTickets,
       npsRecords,
+      slaConfig,
       storeReady,
       currentUser,
       globalSearchQuery,
