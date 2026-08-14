@@ -67,6 +67,7 @@ function TicketsList() {
             <input
               value={globalSearchQuery}
               onChange={(e) => setGlobalSearchQuery(e.target.value)}
+              aria-label="Buscar ocorrências"
               placeholder="Buscar por código, cliente, peça..."
               className="w-full rounded-md border bg-background px-3 py-2 pr-8 text-sm outline-none focus:ring-2 focus:ring-ring"
             />

@@ -195,7 +195,7 @@ function TicketDetail() {
                   {resolvePhotos.map((p, i) => (
                     <div key={i} className="group relative h-20 w-20 overflow-hidden rounded-md border bg-muted">
                       <img src={p.url} alt={p.name} className="h-full w-full object-cover" />
-                      <button type="button" onClick={() => removeResolvePhoto(i)} className="absolute right-0.5 top-0.5 hidden h-5 w-5 items-center justify-center rounded-full bg-destructive text-destructive-foreground group-hover:flex">
+                      <button type="button" onClick={() => removeResolvePhoto(i)} aria-label="Remover foto" className="absolute right-0.5 top-0.5 hidden h-5 w-5 items-center justify-center rounded-full bg-destructive text-destructive-foreground group-hover:flex">
                         <X className="h-3 w-3" />
                       </button>
                     </div>
@@ -449,7 +449,7 @@ function QuickInternalDialog({
                 {intPhotos.map((p, i) => (
                   <div key={i} className="group relative h-16 w-16 overflow-hidden rounded-md border bg-muted">
                     <img src={p.url} alt={p.name} className="h-full w-full object-cover" />
-                    <button type="button" onClick={() => removeIntPhoto(i)} className="absolute right-0.5 top-0.5 hidden h-4 w-4 items-center justify-center rounded-full bg-destructive text-destructive-foreground group-hover:flex">
+                    <button type="button" onClick={() => removeIntPhoto(i)} aria-label="Remover foto" className="absolute right-0.5 top-0.5 hidden h-4 w-4 items-center justify-center rounded-full bg-destructive text-destructive-foreground group-hover:flex">
                       <X className="h-2.5 w-2.5" />
                     </button>
                   </div>

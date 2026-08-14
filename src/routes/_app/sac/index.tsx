@@ -120,12 +120,14 @@ export default function SacPipeline() {
           type="text"
           value={busca}
           onChange={(e) => setBusca(e.target.value)}
+          aria-label="Buscar ocorrências"
           placeholder="Buscar por Nº pedido, NF ou cliente..."
           className="w-full rounded-lg border bg-background pl-9 pr-9 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
         />
         {busca && (
           <button
             onClick={() => setBusca("")}
+            aria-label="Limpar busca"
             className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
           >
             <X className="h-4 w-4" />

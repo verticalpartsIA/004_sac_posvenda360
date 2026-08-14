@@ -130,6 +130,7 @@ export function ConferenciaPanel({
                       </a>
                       <button
                         onClick={() => onRemoverFoto(i)}
+                        aria-label="Remover foto"
                         className="absolute -top-1.5 -right-1.5 rounded-full bg-red-500 p-0.5 text-white hover:bg-red-600"
                       >
                         <X className="h-3 w-3" />

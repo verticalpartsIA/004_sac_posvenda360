@@ -295,6 +295,7 @@ function ThreadView() {
             onClick={load}
             className="rounded-md p-1.5 text-muted-foreground hover:bg-muted"
             title="Atualizar"
+            aria-label="Atualizar"
           >
             <RefreshCw className="h-4 w-4" />
           </button>
@@ -413,6 +414,7 @@ function ThreadView() {
                   onClick={openEditContact}
                   className="ml-auto rounded p-0.5 text-muted-foreground hover:text-foreground"
                   title="Editar contato"
+                  aria-label="Editar contato"
                 >
                   <Pencil className="h-3 w-3" />
                 </button>
@@ -429,7 +431,7 @@ function ThreadView() {
                   </p>
                 )}
                 <div className="grid grid-cols-2 gap-1.5">
-                  <div className="flex items-center gap-1 rounded border bg-background px-2 py-1">
+                  <div className="flex items-center gap-1 rounded border bg-background px-2 py-1 focus-within:ring-1 focus-within:ring-ring">
                     <User className="h-3 w-3 shrink-0 text-muted-foreground" />
                     <input
                       autoFocus={!lidContact}
@@ -440,7 +442,7 @@ function ThreadView() {
                       className="flex-1 bg-transparent text-[11px] outline-none placeholder:text-muted-foreground"
                     />
                   </div>
-                  <div className="flex items-center gap-1 rounded border bg-background px-2 py-1">
+                  <div className="flex items-center gap-1 rounded border bg-background px-2 py-1 focus-within:ring-1 focus-within:ring-ring">
                     <Building2 className="h-3 w-3 shrink-0 text-muted-foreground" />
                     <input
                       type="text"
@@ -452,7 +454,7 @@ function ThreadView() {
                   </div>
                 </div>
                 <div className="flex items-center gap-1.5">
-                  <div className="flex flex-1 items-center gap-1 rounded border bg-background px-2 py-1">
+                  <div className="flex flex-1 items-center gap-1 rounded border bg-background px-2 py-1 focus-within:ring-1 focus-within:ring-ring">
                     <Phone className="h-3 w-3 shrink-0 text-amber-500" />
                     <input
                       autoFocus={!!lidContact}
@@ -512,6 +514,7 @@ function ThreadView() {
           <button
             onClick={send}
             disabled={!text.trim() || sending}
+            aria-label="Enviar mensagem"
             className={cn(
               "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition-colors",
               text.trim() && !sending

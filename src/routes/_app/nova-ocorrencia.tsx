@@ -477,6 +477,7 @@ function NewTicket() {
                       <button
                         type="button"
                         onClick={() => removePhoto(i)}
+                        aria-label="Remover foto"
                         className="absolute right-0.5 top-0.5 hidden h-5 w-5 items-center justify-center rounded-full bg-destructive text-destructive-foreground group-hover:flex"
                       >
                         <X className="h-3 w-3" />

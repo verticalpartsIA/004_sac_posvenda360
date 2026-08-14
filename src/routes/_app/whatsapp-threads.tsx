@@ -136,6 +136,7 @@ function NovaConversaModal({
           <h2 className="text-lg font-semibold">Criar ticket e iniciar conversa</h2>
           <button
             onClick={onClose}
+            aria-label="Fechar"
             className="rounded-lg p-1.5 text-muted-foreground hover:bg-muted"
           >
             <X className="h-4 w-4" />
@@ -418,6 +419,7 @@ function WhatsappThreads() {
         <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
         <input
           className="w-full rounded-lg border bg-card py-2 pl-9 pr-4 text-sm outline-none placeholder:text-muted-foreground focus:ring-1 focus:ring-ring"
+          aria-label="Buscar conversas"
           placeholder="Buscar por nome ou numero..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}

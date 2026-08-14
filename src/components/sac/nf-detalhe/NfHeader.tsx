@@ -65,6 +65,7 @@ export function NfHeader({
             onClick={onToggleShowValor}
             className="rounded p-1 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
             title={showValor ? "Ocultar valor" : "Exibir valor"}
+            aria-label={showValor ? "Ocultar valor" : "Exibir valor"}
           >
             {showValor ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
           </button>

@@ -137,6 +137,7 @@ export default function AuditLogPage() {
           type="text"
           value={filterActor}
           onChange={(e) => setFilterActor(e.target.value)}
+          aria-label="Filtrar por usuário"
           placeholder="Filtrar por usuário..."
           className="rounded-lg border bg-background px-3 py-1.5 text-sm w-52 focus:outline-none focus:ring-1 focus:ring-ring"
         />

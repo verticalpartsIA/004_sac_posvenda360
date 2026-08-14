@@ -240,6 +240,7 @@ export function AppLayout() {
             <input
               value={globalSearchQuery}
               onChange={(e) => setGlobalSearchQuery(e.target.value)}
+              aria-label="Busca global"
               placeholder={
                 path.startsWith("/meus-tickets")
                   ? "Buscar na minha fila..."
@@ -247,13 +248,14 @@ export function AppLayout() {
                   ? "Buscar por assunto, setor, RO ou cliente..."
                   : "Buscar ticket, cliente, peça..."
               }
-              className="w-full bg-transparent outline-none placeholder:text-muted-foreground/60"
+              className="w-full rounded bg-transparent outline-none placeholder:text-muted-foreground/60 focus:ring-1 focus:ring-ring"
             />
             {globalSearchQuery && (
               <button
                 type="button"
                 onClick={() => setGlobalSearchQuery("")}
                 title="Limpar busca"
+                aria-label="Limpar busca"
                 className="shrink-0 rounded p-0.5 hover:bg-muted hover:text-foreground"
               >
                 <X className="h-3.5 w-3.5" />
