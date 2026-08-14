@@ -51,9 +51,44 @@ function _mascaraDoc(s) {
   return null;
 }
 
+const ANTHROPIC_KEY = () => process.env.ANTHROPIC_API_KEY || "";
+const CLAUDE_MODEL  = () => process.env.CLAUDE_MODEL || "claude-opus-4-8"; // Opus por padrão (NÃO cai p/ HERMES_MODEL=haiku do painel)
+const NOTIFY_URL    = () => process.env.NOTIFY_WEBHOOK_URL || ""; // n8n / Slack / Telegram
+// STT local (faster-whisper no VPS) — transcreve áudios de clientes p/ a Verti "ouvir".
+// A API Anthropic não aceita áudio; a transcrição é 100% local (sem custo, sem terceiros).
+const STT_URL    = () => process.env.STT_URL || "http://72.61.48.156:8090/transcribe";
+const STT_APIKEY = () => process.env.STT_APIKEY || "b9cf3d5fbd2b1f3559b50e5d5936da0e2e078b841d815a81"; // default p/ sobreviver a deploy (gitignored .env some no republish); repo privado, mesmo padrão dos demais segredos
+
+// ─── Robustez: envio de WhatsApp com timeout + retry (Evolution não pode travar a resposta) ──
+async function evoSendText(number, text, { tries = 2 } = {}) {
+  let lastErr = "sem tentativa";
+  for (let i = 0; i < tries; i++) {
+    try {
+      const r = await fetch(`${EVO_URL}/message/sendText/pv360`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", apikey: WH_APIKEY() },
+        body: JSON.stringify({ number, text }),
+        signal: AbortSignal.timeout(15_000),
+      });
+      if (r.ok) return { ok: true };
+      lastErr = `HTTP ${r.status}`;
+      // 4xx (ex.: número inexistente) não melhora repetindo
+      if (r.status >= 400 && r.status < 500) {
+        console.error("[evo] sendText", lastErr, (await r.text().catch(() => "")).slice(0, 200));
+        return { ok: false, error: lastErr };
+      }
+    } catch (e) { lastErr = e.message; }
+    if (i < tries - 1) await new Promise((res) => setTimeout(res, 800 * (i + 1)));
+  }
+  console.error("[evo] sendText falhou:", lastErr);
+  return { ok: false, error: lastErr };
+}
+
 export {
   SB_URL, SB_SERVICE_KEY, sbFetch, readBody,
-  WH_APIKEY, EVO_URL,
+  WH_APIKEY, EVO_URL, evoSendText,
   ERP_URL, ERP_KEY, erpFetch,
   _enc, _digits, _mascaraDoc,
+  ANTHROPIC_KEY, CLAUDE_MODEL, NOTIFY_URL,
+  STT_URL, STT_APIKEY,
 };
