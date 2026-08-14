@@ -30,6 +30,7 @@ function readBody(req) {
 
 // Segredos via painel Passenger (env_present confirmado). Sem fallback hardcoded p/ não expor no git.
 const WH_APIKEY = () => process.env.EVOLUTION_APIKEY || "";
+const EVO_URL = "http://72.61.48.156:8080";
 
 // ─── Acesso ao ERP (bd_Omie) para consultas do atendente ──────────────────────
 const ERP_URL = () => process.env.ERP_URL || "https://kgecbycsyrtdhmdziuul.supabase.co";
@@ -52,7 +53,7 @@ function _mascaraDoc(s) {
 
 export {
   SB_URL, SB_SERVICE_KEY, sbFetch, readBody,
-  WH_APIKEY,
+  WH_APIKEY, EVO_URL,
   ERP_URL, ERP_KEY, erpFetch,
   _enc, _digits, _mascaraDoc,
 };
