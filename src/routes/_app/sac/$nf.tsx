@@ -142,10 +142,10 @@ export default function SacNFDetalhe() {
       const n = nfData as NFDetalhe;
       setNf(n);
       setExp({
-        tipo_entrega: (n as any).tipo_entrega ?? "TRANSPORTADORA",
+        tipo_entrega: (n.tipo_entrega as ExpedicaoForm["tipo_entrega"]) ?? "TRANSPORTADORA",
         transportadora: n.transportadora ?? "",
         codigo_rastreio: n.codigo_rastreio ?? "",
-        retirado_por: (n as any).retirado_por ?? "",
+        retirado_por: n.retirado_por ?? "",
         data_coleta: n.data_coleta ?? "",
         transportadora_entregou: n.transportadora_entregou ?? null,
         data_entrega_real: n.data_entrega_real ?? "",
@@ -237,7 +237,7 @@ export default function SacNFDetalhe() {
   async function salvarExpedicao() {
     // Poka-Yoke: bloqueia se conferência incompleta ou divergência não reportada
     // Exceção: se data_entrega_real já preenchida (entrega confirmada), a conferência é opcional
-    const itensGuard = ((nf as any)?.dados_omie?.det ?? []) as OmieItem[];
+    const itensGuard = nf?.dados_omie?.det ?? [];
     const entregaConfirmada = !!exp.data_entrega_real;
     if (itensGuard.length > 0 && !entregaConfirmada) {
       const todasOk = itensGuard.every((_, i) => conferencias[i] != null);
@@ -268,7 +268,7 @@ export default function SacNFDetalhe() {
       comprovante_entrega: exp.comprovante_entrega || null,
       status_entrega: calcularStatusEntrega(),
       updated_at: new Date().toISOString(),
-    } as any);
+    });
 
     if (error) {
       setMsgExp("Erro ao salvar.");
@@ -423,7 +423,7 @@ export default function SacNFDetalhe() {
   async function reportarDivergencia() {
     setReportandoDiv(true);
     setMsgDiv("");
-    const itens = ((nf as any)?.dados_omie?.det ?? []) as OmieItem[];
+    const itens = nf?.dados_omie?.det ?? [];
     const payload = itens.map((item, i) => {
       const qtdPedida = item.produto?.quantidade ?? 0;
       const qtdConf = conferencias[i] ?? 0;
@@ -500,7 +500,7 @@ export default function SacNFDetalhe() {
       <div className="py-20 text-center text-muted-foreground text-sm">NF não encontrada.</div>
     );
 
-  const itensOmie = ((nf as any).dados_omie?.det ?? []) as OmieItem[];
+  const itensOmie = nf.dados_omie?.det ?? [];
   const todasPreenchidas =
     itensOmie.length === 0 || itensOmie.every((_, i) => conferencias[i] != null);
   const temDivergencia = itensOmie.some((item, i) => {

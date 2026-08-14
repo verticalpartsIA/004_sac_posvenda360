@@ -416,8 +416,7 @@ function mapTicket(row: TicketRow, audits: AuditLogRow[], internalIds: string[])
     audit: audits.map(mapAuditLog),
     assignee: row.assigned_to ?? undefined,
     internalTicketIds: internalIds,
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    productFamily: (row as any).product_family ?? undefined,
+    productFamily: row.product_family ?? undefined,
   };
 }
 
@@ -751,8 +750,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         whatsapp_thread_id: input.whatsappThreadId ?? null,
         sac_nf_id: input.sacNfId ?? null,
         acao_contencao: denormalizeContainmentActions(input.acaoContencao),
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        ...(input.productFamily ? ({ product_family: input.productFamily } as any) : {}),
+        ...(input.productFamily ? { product_family: input.productFamily } : {}),
         created_by: user?.id ?? null,
         assigned_to: user?.id ?? null,
       });

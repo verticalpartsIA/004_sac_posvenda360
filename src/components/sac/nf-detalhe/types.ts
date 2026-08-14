@@ -19,6 +19,8 @@ export type NFDetalhe = {
   transportadora: string | null;
   codigo_rastreio: string | null;
   // expedição
+  tipo_entrega: string | null;
+  retirado_por: string | null;
   data_coleta: string | null;
   transportadora_entregou: boolean | null;
   data_entrega_real: string | null;
@@ -31,6 +33,9 @@ export type NFDetalhe = {
   obs_omie: string | null;
   numero_pedido_omie: string | null;
   codigo_pedido_omie: string | null;
+  // dados_omie guarda o pedido bruto do Omie (jsonb); só `det` (itens do pedido,
+  // usados na conferência Poka-Yoke) é consumido aqui, daí a forma restrita.
+  dados_omie: { det?: OmieItem[] } | null;
   sac_clientes: {
     nome_fantasia: string | null;
     whatsapp: string | null;

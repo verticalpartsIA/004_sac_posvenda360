@@ -1,11 +1,12 @@
 import { createClient } from "@supabase/supabase-js";
+import type { Database, Json } from "@/integrations/supabase/types";
 import { classificarABC, parseDateBR, type OmiePedido, type OmieCliente } from "./omie-client";
 
 const SB_URL = process.env.SUPABASE_URL ?? "https://jkbklzlbhhfnamaeislb.supabase.co";
 const getSb = () => {
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!key) throw new Error("SUPABASE_SERVICE_ROLE_KEY não definida");
-  return createClient(SB_URL, key, {
+  return createClient<Database>(SB_URL, key, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
 };
@@ -74,13 +75,13 @@ export async function triggerPosVendaFlow(nfId: string, classeAbc: "A" | "B" | "
 
   if (!nf) return;
 
-  const cliente = (nf as any).sac_clientes;
+  const cliente = nf.sac_clientes;
   const whatsapp = cliente?.whatsapp || cliente?.telefone;
   const nomeCliente = cliente?.nome_fantasia || cliente?.razao_social || "Cliente";
 
   // DECIDE — Classe A: mensagem VIP imediata
   if (classeAbc === "A" && whatsapp) {
-    const msg = mensagemVIP(nf.nf_numero, nomeCliente, nf.codigo_rastreio);
+    const msg = mensagemVIP(nf.nf_numero, nomeCliente, nf.codigo_rastreio ?? undefined);
     const ok = await enviarWhatsApp(whatsapp, msg);
     await registrarLog(sb, nfId, "WHATSAPP", "VIP_FOLLOWUP", whatsapp, msg, ok ? "ENVIADO" : "ERRO");
   }
@@ -118,7 +119,7 @@ export async function dispararPesquisaSatisfacao(nfId: string) {
 
   if (!pesquisa?.token) return;
 
-  const cliente = (nf as any).sac_clientes;
+  const cliente = nf.sac_clientes;
   const whatsapp = cliente?.whatsapp || cliente?.telefone;
   const nomeCliente = cliente?.nome_fantasia || cliente?.razao_social || "Cliente";
 
@@ -197,7 +198,7 @@ export async function ingerirNFdoOmie(pedido: OmiePedido, cliente: OmieCliente) 
         previsao_entrega: previsaoEntrega,
         status_entrega: "EMITIDA",
         codigo_pedido_omie: pedido.cabecalho.codigo_pedido,
-        dados_omie: pedido as unknown as Record<string, unknown>,
+        dados_omie: pedido as unknown as Json,
         updated_at: new Date().toISOString(),
       },
       { onConflict: "nf_numero" }

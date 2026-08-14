@@ -9,9 +9,10 @@
 // fat_checado_em pra não divergir mais do que já diverge.
 import { createAPIFileRoute } from "@tanstack/react-start/api";
 import { createClient } from "@supabase/supabase-js";
+import type { Database } from "@/integrations/supabase/types";
 import { parseDateBR } from "@/lib/domain/data-br.js";
 
-const sb = createClient(
+const sb = createClient<Database>(
   process.env.SUPABASE_URL ?? "https://jkbklzlbhhfnamaeislb.supabase.co",
   process.env.SUPABASE_SERVICE_ROLE_KEY ??
     "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImprYmtsemxiaGhmbmFtYWVpc2xiIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3Nzc5MDM5MywiZXhwIjoyMDkzMzY2MzkzfQ.WoFDfpykUrwQcg0uzDwgfKSwWCy-7zrrJGWGOpo5drs",
@@ -61,7 +62,7 @@ export const APIRoute = createAPIFileRoute("/api/sac/sync-faturamento")({
     const nfs = todas.filter((nf) => {
       if (!nf.faturado) return true;
       if (!nf.fat_checado_em) return true;
-      return agora - new Date(nf.fat_checado_em as string).getTime() > THROTTLE_MS;
+      return agora - new Date(nf.fat_checado_em).getTime() > THROTTLE_MS;
     });
     if (!nfs.length) return Response.json({ ok: true, atualizados: 0, adiadas: todas.length });
 
@@ -82,12 +83,12 @@ export const APIRoute = createAPIFileRoute("/api/sac/sync-faturamento")({
             data_faturamento: dataFat,
             fat_checado_em: new Date().toISOString(),
             updated_at: new Date().toISOString(),
-          } as any).eq("id", nf.id);
+          }).eq("id", nf.id);
           atualizados++;
         } catch (err) {
           await sb.from("sac_notas_fiscais").update({
             fat_checado_em: new Date().toISOString(),
-          } as any).eq("id", nf.id);
+          }).eq("id", nf.id);
           erros.push(`pedido ${codigo}: ${(err as Error).message}`);
         }
       }));
