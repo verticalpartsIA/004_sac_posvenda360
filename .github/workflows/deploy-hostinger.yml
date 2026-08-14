@@ -44,7 +44,7 @@ jobs:
             chmod 600 .env
 
             set -a && . "$SITE_DIR/public_html/.builds/config/.env" && set +a
-            npm ci
+            RAYON_NUM_THREADS=2 UV_THREADPOOL_SIZE=2 npm ci
             NODE_OPTIONS=--max-old-space-size=2048 RAYON_NUM_THREADS=2 UV_THREADPOOL_SIZE=2 npm run build
 
             # A implantação nativa do Hostinger (Implantações > GitHub) regenera o
