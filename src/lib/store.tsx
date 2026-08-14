@@ -14,6 +14,7 @@ import * as ticketMessagesRepo from "@/lib/repositories/ticketMessagesRepo";
 import * as npsRepo from "@/lib/repositories/npsRepo";
 import * as pesquisasRepo from "@/lib/repositories/pesquisasRepo";
 import * as auditLogRepo from "@/lib/repositories/auditLogRepo";
+import * as sacClientesRepo from "@/lib/repositories/sacClientesRepo";
 import { slaStatus } from "@/lib/domain/sla";
 import { useAuth } from "./auth";
 import type {
@@ -42,8 +43,16 @@ import { categorizeNps } from "./types";
 
 type TicketRow = Tables<"tickets">;
 type InternalTicketRow = Tables<"internal_tickets">;
-type TicketMessageRow = Tables<"ticket_messages">;
-type AuditLogRow = Tables<"audit_log">;
+// Projeção enxuta usada pelo carregamento do Store (ver ticketMessagesRepo/auditLogRepo e #109)
+// — só os campos que mapInternalResponse/mapAuditLog/extractTicketMeta de fato leem.
+type TicketMessageRow = Pick<
+  Tables<"ticket_messages">,
+  "id" | "created_at" | "author_name" | "body" | "internal_ticket_id"
+>;
+type AuditLogRow = Pick<
+  Tables<"audit_log">,
+  "id" | "created_at" | "entity_type" | "entity_id" | "action" | "actor_name" | "payload"
+>;
 type NpsRow = Tables<"nps_records">;
 
 const now = () => new Date().toISOString();
@@ -283,6 +292,49 @@ function extractTicketMeta(audits: AuditLogRow[]) {
   }
 
   return { resolution, quality };
+}
+
+type ClienteTelefoneRow = Pick<
+  Tables<"sac_clientes">,
+  "telefone" | "whatsapp" | "nome_fantasia" | "razao_social"
+>;
+
+const onlyDigits = (s: string | null | undefined) => (s ?? "").replace(/\D/g, "");
+
+function formatTelefone(raw: string): string {
+  const d = onlyDigits(raw).replace(/^55(?=\d{10,11}$)/, ""); // tira o 55 (Brasil) se sobrar DDD+número
+  if (d.length === 11) return `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}`;
+  if (d.length === 10) return `(${d.slice(0, 2)}) ${d.slice(2, 6)}-${d.slice(6)}`;
+  return raw;
+}
+
+/** Mapa telefone (só dígitos) → nome de exibição, a partir de `sac_clientes`. */
+function buildClienteNomePorTelefone(rows: ClienteTelefoneRow[]): Map<string, string> {
+  const map = new Map<string, string>();
+  for (const row of rows) {
+    const nome = row.nome_fantasia || row.razao_social;
+    if (!nome) continue;
+    for (const tel of [row.telefone, row.whatsapp]) {
+      const digits = onlyDigits(tel);
+      if (digits) map.set(digits, nome);
+    }
+  }
+  return map;
+}
+
+// Tickets criados automaticamente pelo webhook do WhatsApp usam o telefone cru como
+// `customer` quando o contato não tem nome no perfil (ver #92). Resolve pra um nome
+// real via sac_clientes quando possível; senão, rótulo claro em vez do número puro.
+function resolveTicketCustomer(row: TicketRow, nomePorTelefone: Map<string, string>): TicketRow {
+  const isRawPhone = /^\d{10,13}$/.test(row.customer.trim());
+  if (!isRawPhone) return row;
+  const telDigits = onlyDigits(row.customer_telefone) || onlyDigits(row.customer);
+  const nome = nomePorTelefone.get(telDigits);
+  const telFmt = formatTelefone(row.customer_telefone ?? row.customer);
+  return {
+    ...row,
+    customer: nome ? `${nome} (${telFmt})` : `Cliente não identificado (${telFmt})`,
+  };
 }
 
 function mapAuditLog(row: AuditLogRow): AuditLog {
@@ -572,7 +624,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [globalSearchQuery, setGlobalSearchQuery] = useState("");
 
   const loadAll = useCallback(async () => {
-    const [ticketsRes, internalRes, messagesRes, auditsRes, npsRes, sacPesquisasRes] =
+    const [ticketsRes, internalRes, messagesRes, auditsRes, npsRes, sacPesquisasRes, clientesRes] =
       await Promise.all([
         ticketsRepo.listAll(),
         internalTicketsRepo.listAll(),
@@ -580,6 +632,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         auditLogRepo.listAllOrdenado(),
         npsRepo.listAll(),
         pesquisasRepo.listRespondidas(),
+        sacClientesRepo.listTelefones(),
       ]);
 
     if (ticketsRes.error) console.error("[Store] Failed to load tickets", ticketsRes.error);
@@ -591,6 +644,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     if (npsRes.error) console.error("[Store] Failed to load NPS records", npsRes.error);
     if (sacPesquisasRes.error)
       console.error("[Store] Failed to load SAC pesquisas", sacPesquisasRes.error);
+    if (clientesRes.error)
+      console.error("[Store] Failed to load sac_clientes telefones", clientesRes.error);
 
     const ticketRows = ticketsRes.data ?? [];
     const internalRows = internalRes.data ?? [];
@@ -598,10 +653,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     const auditRows = auditsRes.data ?? [];
     const npsRows = npsRes.data ?? [];
     const sacPesquisaRows = (sacPesquisasRes.data ?? []) as unknown as SacPesquisaRow[];
+    const clienteNomePorTelefone = buildClienteNomePorTelefone(clientesRes.data ?? []);
 
     const mappedTickets = ticketRows.map((row) =>
       mapTicket(
-        row,
+        resolveTicketCustomer(row, clienteNomePorTelefone),
         auditRows.filter((audit) => audit.entity_type === "ticket" && audit.entity_id === row.id),
         internalRows
           .filter((internal) => internal.linked_occurrence_id === row.id)

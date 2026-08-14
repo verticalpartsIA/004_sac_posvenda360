@@ -20,11 +20,11 @@ export default isNode
       plugins: [
         tsConfigPaths(),
         tailwindcss(),
-        tanstackStart({ target: "node-server" }),
+        tanstackStart({ target: "node-server", router: { autoCodeSplitting: true } }),
         viteReact(),
       ],
       resolve: {
         dedupe: ["react", "react-dom", "@tanstack/react-router", "@tanstack/react-start"],
       },
     })
-  : lovableDefineConfig();
+  : lovableDefineConfig({ tanstackStart: { router: { autoCodeSplitting: true } } });

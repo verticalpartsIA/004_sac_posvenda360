@@ -2,7 +2,6 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { useStore, slaStatus } from "@/lib/store";
 import { aggregateNps, categorizeNps } from "@/lib/types";
-import { utils, writeFile } from "xlsx";
 import { Download, FileSpreadsheet, BarChart3, Users, ListChecks, Target } from "lucide-react";
 import { toast } from "sonner";
 
@@ -32,7 +31,8 @@ function RelatorioFO504() {
     tickets, internalTickets, npsRecords, periodo,
   ]);
 
-  const handleExport = () => {
+  const handleExport = async () => {
+    const { utils, writeFile } = await import("xlsx");
     const wb = utils.book_new();
 
     // ───── 1. Resumo Executivo ─────

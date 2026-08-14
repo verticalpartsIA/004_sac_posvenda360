@@ -38,35 +38,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [roles, setRoles] = useState<AppRole[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // `onAuthStateChange` já dispara uma vez imediatamente ao inscrever (evento
+  // INITIAL_SESSION), além de futuras mudanças (SIGNED_IN, TOKEN_REFRESHED...).
+  // Um `getSession()` separado buscando roles de novo duplicava a consulta a
+  // `user_roles` — e como o Supabase pode emitir mais de um evento no boot,
+  // a mesma sessão chegava a disparar 3 fetches idênticos (ver #109). A guarda
+  // por `lastFetchedUserIdRef` evita refetch quando o usuário não mudou.
+  const lastFetchedUserIdRef = useRef<string | null>(null);
   useEffect(() => {
+    const fetchRoles = (userId: string) => {
+      if (lastFetchedUserIdRef.current === userId) return;
+      lastFetchedUserIdRef.current = userId;
+      supabase
+        .from("user_roles")
+        .select("role")
+        .eq("user_id", userId)
+        .then(({ data }) => {
+          setRoles((data ?? []).map((r: { role: AppRole }) => r.role));
+        });
+    };
+
     const { data: sub } = supabase.auth.onAuthStateChange((_e, s) => {
       setSession(s);
       setUser(s?.user ?? null);
       if (s?.user) {
-        setTimeout(() => {
-          supabase
-            .from("user_roles")
-            .select("role")
-            .eq("user_id", s.user.id)
-            .then(({ data }) => {
-              setRoles((data ?? []).map((r: { role: AppRole }) => r.role));
-            });
-        }, 0);
+        setTimeout(() => fetchRoles(s.user.id), 0);
       } else {
+        lastFetchedUserIdRef.current = null;
         setRoles([]);
-      }
-    });
-    supabase.auth.getSession().then(({ data }) => {
-      setSession(data.session);
-      setUser(data.session?.user ?? null);
-      if (data.session?.user) {
-        supabase
-          .from("user_roles")
-          .select("role")
-          .eq("user_id", data.session.user.id)
-          .then(({ data: r }) => {
-            setRoles((r ?? []).map((x: { role: AppRole }) => x.role));
-          });
       }
       setLoading(false);
     });
