@@ -16,6 +16,7 @@ import * as pesquisasRepo from "@/lib/repositories/pesquisasRepo";
 import * as auditLogRepo from "@/lib/repositories/auditLogRepo";
 import * as sacClientesRepo from "@/lib/repositories/sacClientesRepo";
 import * as slaConfigRepo from "@/lib/repositories/slaConfigRepo";
+import * as profilesRepo from "@/lib/repositories/profilesRepo";
 import { slaStatus } from "@/lib/domain/sla";
 import { useAuth } from "./auth";
 import type {
@@ -55,6 +56,9 @@ type AuditLogRow = Pick<
   "id" | "created_at" | "entity_type" | "entity_id" | "action" | "actor_name" | "payload"
 >;
 type NpsRow = Tables<"nps_records">;
+
+/** Usuário atribuível a um ticket, resolvido a partir de `profiles` (ver #assignee). */
+export type TeamMember = { userId: string; nome: string; departamento?: string };
 
 const now = () => new Date().toISOString();
 const uid = () => Math.random().toString(36).slice(2, 10);
@@ -586,6 +590,8 @@ interface StoreCtx {
   tickets: Ticket[];
   internalTickets: InternalTicket[];
   npsRecords: NpsRecord[];
+  /** Pessoas atribuíveis a um ticket (de `profiles`) — usado pelo AssigneePicker. */
+  teamMembers: TeamMember[];
   /** Prazo (horas) por prioridade, de `sla_config` — cai em DEFAULT_SLA_HOURS
    * enquanto não carrega ou se a tabela não tiver a prioridade (ver #90). */
   slaConfig: Record<TicketPriority, number>;
@@ -620,6 +626,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [internalTickets, setInternalTickets] = useState<InternalTicket[]>([]);
   const [npsRecords, setNpsRecords] = useState<NpsRecord[]>([]);
+  const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
   const [slaConfig, setSlaConfig] = useState<Record<TicketPriority, number>>(DEFAULT_SLA_HOURS);
   const [storeReady, setStoreReady] = useState(false);
   // Busca global do header (AppLayout) — consumida por qualquer página que
@@ -628,7 +635,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [globalSearchQuery, setGlobalSearchQuery] = useState("");
 
   const loadAll = useCallback(async () => {
-    const [ticketsRes, internalRes, messagesRes, auditsRes, npsRes, sacPesquisasRes, clientesRes, slaConfigRes] =
+    const [ticketsRes, internalRes, messagesRes, auditsRes, npsRes, sacPesquisasRes, clientesRes, slaConfigRes, profilesRes] =
       await Promise.all([
         ticketsRepo.listAll(),
         internalTicketsRepo.listAll(),
@@ -638,6 +645,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         pesquisasRepo.listRespondidas(),
         sacClientesRepo.listTelefones(),
         slaConfigRepo.listAll(),
+        profilesRepo.listAll(),
       ]);
 
     if (ticketsRes.error) console.error("[Store] Failed to load tickets", ticketsRes.error);
@@ -653,6 +661,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       console.error("[Store] Failed to load sac_clientes telefones", clientesRes.error);
     if (slaConfigRes.error)
       console.error("[Store] Failed to load sla_config", slaConfigRes.error);
+    if (profilesRes.error) console.error("[Store] Failed to load profiles", profilesRes.error);
 
     const ticketRows = ticketsRes.data ?? [];
     const internalRows = internalRes.data ?? [];
@@ -693,6 +702,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setTickets(mappedTickets);
     setInternalTickets(mappedInternalTickets);
     setNpsRecords(mergedNps);
+    setTeamMembers(
+      (profilesRes.data ?? []).map((p) => ({
+        userId: p.user_id,
+        nome: p.display_name || p.user_id.slice(0, 8),
+        departamento: p.departamento ?? undefined,
+      })),
+    );
     setStoreReady(true);
   }, []);
 
@@ -1155,6 +1171,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       tickets,
       internalTickets,
       npsRecords,
+      teamMembers,
       slaConfig,
       storeReady,
       currentUser,
@@ -1175,6 +1192,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       tickets,
       internalTickets,
       npsRecords,
+      teamMembers,
       slaConfig,
       storeReady,
       currentUser,

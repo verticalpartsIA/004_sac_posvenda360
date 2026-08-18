@@ -13,6 +13,7 @@ import {
 } from "@/lib/types";
 import { StatusBadge, PriorityBadge } from "@/components/app/StatusBadge";
 import { SlaBar } from "@/components/app/SlaBar";
+import { AssigneePicker } from "@/components/app/AssigneePicker";
 import { ArrowLeft, ShieldCheck, Clock, User, MessageCircle, FileEdit, Star, AlertTriangle, Users, Plus, RefreshCw, ImageIcon, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -21,7 +22,7 @@ export const Route = createFileRoute("/_app/ocorrencia/$ro")({ component: Ticket
 function TicketDetail() {
   const { ro } = Route.useParams();
   const router = useRouter();
-  const { tickets, internalTickets, storeReady, updateStatus, resolveTicket, setNps, createInternalTicket } = useStore();
+  const { tickets, internalTickets, storeReady, updateStatus, resolveTicket, setNps, createInternalTicket, assignTicket, teamMembers } = useStore();
   const ticket = tickets.find((t) => t.code === ro || t.id === ro);
 
   const [resolving, setResolving] = useState(false);
@@ -103,6 +104,14 @@ function TicketDetail() {
               <span className="font-semibold">{ticket.slaHours}h</span>
             </div>
             <SlaBar ticket={ticket} />
+            <div className="mt-3 flex items-center justify-between gap-2 text-xs">
+              <span className="font-medium uppercase tracking-wide text-muted-foreground">Responsável</span>
+              <AssigneePicker
+                assignee={ticket.assignee}
+                members={teamMembers}
+                onChange={(userId) => assignTicket(ticket.id, userId)}
+              />
+            </div>
           </div>
         </div>
 

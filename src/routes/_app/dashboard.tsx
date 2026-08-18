@@ -5,7 +5,8 @@ import { useAuth } from "@/lib/auth";
 import { StatusBadge, PriorityBadge } from "@/components/app/StatusBadge";
 import { SlaBar } from "@/components/app/SlaBar";
 import { BotaoTutorial } from "@/components/app/BotaoTutorial";
-import { ArrowUpRight, Clock, AlertTriangle, CheckCircle2, MessageCircle, UserPlus } from "lucide-react";
+import { AssigneePicker } from "@/components/app/AssigneePicker";
+import { ArrowUpRight, Clock, AlertTriangle, CheckCircle2, MessageCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/_app/dashboard")({ component: OperatorDashboard });
@@ -45,7 +46,7 @@ function matchesFilter(t: ReturnType<typeof useStore>["tickets"][number], filter
 }
 
 function OperatorDashboard() {
-  const { tickets, assignTicket, globalSearchQuery } = useStore();
+  const { tickets, assignTicket, teamMembers, globalSearchQuery } = useStore();
   const { user, roles } = useAuth();
   const [activeFilters, setActiveFilters] = useState<QuickFilter[]>([]);
 
@@ -138,45 +139,31 @@ function OperatorDashboard() {
           </div>
         </header>
         <ul className="divide-y">
-          {sorted.map((t) => {
-            const responsavel = !t.assignee ? "Sem responsável" : t.assignee === user?.id ? "Você" : "Atribuído";
-            return (
-              <li key={t.id}>
-                <Link to="/ocorrencia/$ro" params={{ ro: t.code }} className="grid grid-cols-1 gap-3 px-5 py-4 hover:bg-muted/40 sm:grid-cols-[auto_1fr_auto_140px_150px] sm:items-center">
-                  <div className="flex items-center gap-3">
-                    <span className="font-mono text-xs font-semibold text-muted-foreground">{t.code}</span>
-                    <PriorityBadge priority={t.priority} />
+          {sorted.map((t) => (
+            <li key={t.id}>
+              <Link to="/ocorrencia/$ro" params={{ ro: t.code }} className="grid grid-cols-1 gap-3 px-5 py-4 hover:bg-muted/40 sm:grid-cols-[auto_1fr_auto_140px_170px] sm:items-center">
+                <div className="flex items-center gap-3">
+                  <span className="font-mono text-xs font-semibold text-muted-foreground">{t.code}</span>
+                  <PriorityBadge priority={t.priority} />
+                </div>
+                <div className="min-w-0">
+                  <div className="truncate font-medium">{t.customer}</div>
+                  <div className="truncate text-xs text-muted-foreground">
+                    {t.part} · {t.partCode}
                   </div>
-                  <div className="min-w-0">
-                    <div className="truncate font-medium">{t.customer}</div>
-                    <div className="truncate text-xs text-muted-foreground">
-                      {t.part} · {t.partCode}
-                    </div>
-                  </div>
-                  <StatusBadge status={t.status} />
-                  <SlaBar ticket={t} />
-                  <div className="flex items-center gap-2 sm:justify-end">
-                    <span className={cn("text-xs", !t.assignee && "text-muted-foreground")}>{responsavel}</span>
-                    {t.assignee !== user?.id && (
-                      <button
-                        type="button"
-                        title="Atribuir a mim"
-                        aria-label="Atribuir a mim"
-                        onClick={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          if (user?.id) assignTicket(t.id, user.id);
-                        }}
-                        className="inline-flex items-center justify-center rounded-md border border-input p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
-                      >
-                        <UserPlus className="h-3.5 w-3.5" />
-                      </button>
-                    )}
-                  </div>
-                </Link>
-              </li>
-            );
-          })}
+                </div>
+                <StatusBadge status={t.status} />
+                <SlaBar ticket={t} />
+                <div className="flex items-center sm:justify-end">
+                  <AssigneePicker
+                    assignee={t.assignee}
+                    members={teamMembers}
+                    onChange={(userId) => assignTicket(t.id, userId)}
+                  />
+                </div>
+              </Link>
+            </li>
+          ))}
           {sorted.length === 0 && (
             <li className="px-5 py-12 text-center text-sm text-muted-foreground">
               {activeFilters.length > 0 || query

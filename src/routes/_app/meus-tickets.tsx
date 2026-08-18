@@ -12,9 +12,7 @@ function MyTickets() {
   const email = user?.email ?? "";
   const query = globalSearchQuery.trim().toLowerCase();
 
-  const mine = tickets.filter(
-    (t) => t.assignee && (t.assignee === email || email.startsWith(t.assignee.toLowerCase())),
-  );
+  const mine = tickets.filter((t) => t.assignee && t.assignee === user?.id);
 
   const matchesQuery = (t: (typeof tickets)[number]) =>
     `${t.code} ${t.customer} ${t.part} ${t.partCode}`.toLowerCase().includes(query);
