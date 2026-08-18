@@ -46,3 +46,11 @@ WHERE u.id = p.user_id
     OR u.raw_user_meta_data ? 'display_name'
     OR u.raw_user_meta_data ? 'department'
   );
+
+-- Concede o papel "gestor" (alçada do pv360, não o nível do vpsistema) pra
+-- Jéssica Santos poder ver /gestor/kpis. Idempotente via ON CONFLICT.
+INSERT INTO public.user_roles (user_id, role)
+SELECT id, 'gestor'
+FROM auth.users
+WHERE email = 'jessica.santos@verticalparts.com.br'
+ON CONFLICT (user_id, role) DO NOTHING;
