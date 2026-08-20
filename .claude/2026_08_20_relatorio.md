@@ -1,9 +1,14 @@
-# RELATÓRIO — pv360: botão de excluir ticket + limpeza de tickets e NFs
+# Relatório — Botão de Excluir Ticket, Limpeza de Tickets e Notas Fiscais no SAC
 
-**Data:** 2026-08-20
-**Autor:** Claude (Claude Code) a pedido de Gelson Simões
+**Documento:** Relatório de Sessão · Implementação e Manutenção de Dados
+**Sistema:** VP Pós-Venda 360° — VerticalParts
+**Ambiente:** https://posvenda360.vpsistema.com
+**Supabase project (pv360):** `jkbklzlbhhfnamaeislb`
+**Data de execução:** 2026-08-20
+**Executor:** Claude Sonnet 5 (Anthropic)
+**Branch:** `main` (commit direto — deploy contínuo Hostinger via GitHub Actions)
+**Relatório anterior:** `.claude/2026_08_18_relatorio.md`.
 **Escopo:** implementar exclusão de tickets pelo operador na tela `/ocorrencias`, limpar a base de tickets em produção e remover 40 Notas Fiscais indevidas do rastreio SAC (`/sac`).
-**Relatório anterior:** `2026_06_17_relatorio.md`.
 
 ---
 
