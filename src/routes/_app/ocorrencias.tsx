@@ -1,9 +1,20 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
-import { X } from "lucide-react";
+import { X, Trash2 } from "lucide-react";
+import { toast } from "sonner";
 import { useStore } from "@/lib/store";
 import { StatusBadge, PriorityBadge } from "@/components/app/StatusBadge";
 import { SlaBar } from "@/components/app/SlaBar";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import {
   STATUS_LABEL,
   OCCURRENCE_REASON_LABEL,
@@ -34,8 +45,24 @@ const REASON_TONE: Record<OccurrenceReason, string> = {
 };
 
 function TicketsList() {
-  const { tickets, globalSearchQuery, setGlobalSearchQuery } = useStore();
+  const { tickets, globalSearchQuery, setGlobalSearchQuery, deleteTicket } = useStore();
   const [filter, setFilter] = useState<(typeof filters)[number]>("todos");
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; code: string } | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
+  async function handleConfirmDelete() {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    try {
+      await deleteTicket(deleteTarget.id);
+      toast.success(`Ticket ${deleteTarget.code} excluído.`);
+      setDeleteTarget(null);
+    } catch {
+      toast.error("Não foi possível excluir o ticket. Tente novamente.");
+    } finally {
+      setDeleting(false);
+    }
+  }
 
   // Mesmo estado de busca do header (AppLayout) — sem estado local duplicado,
   // pra não ter dois valores brigando por qual é a fonte da verdade (isso
@@ -100,7 +127,7 @@ function TicketsList() {
       </div>
 
       <div className="overflow-hidden rounded-xl border bg-card shadow-[var(--shadow-elegant)]">
-        <div className="hidden grid-cols-[110px_1fr_140px_110px_auto_110px_140px_30px] items-center gap-3 border-b bg-muted/40 px-5 py-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground lg:grid">
+        <div className="hidden grid-cols-[110px_1fr_140px_110px_auto_110px_140px_30px_36px] items-center gap-3 border-b bg-muted/40 px-5 py-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground lg:grid">
           <div>Código</div>
           <div>Cliente / Peça</div>
           <div>Motivo</div>
@@ -109,14 +136,15 @@ function TicketsList() {
           <div>Prioridade</div>
           <div>SLA</div>
           <div></div>
+          <div></div>
         </div>
         <ul className="divide-y">
           {filtered.map((t) => (
-            <li key={t.id}>
+            <li key={t.id} className="relative">
               <Link
                 to="/ocorrencia/$ro"
                 params={{ ro: t.code }}
-                className="grid grid-cols-1 gap-3 px-5 py-4 hover:bg-muted/40 lg:grid-cols-[110px_1fr_140px_110px_auto_110px_140px_30px] lg:items-center lg:gap-3"
+                className="grid grid-cols-1 gap-3 px-5 py-4 pr-12 hover:bg-muted/40 lg:grid-cols-[110px_1fr_140px_110px_auto_110px_140px_30px_36px] lg:items-center lg:gap-3 lg:pr-5"
               >
                 <span className="font-mono text-xs font-semibold">{t.code}</span>
                 <div className="min-w-0">
@@ -144,7 +172,21 @@ function TicketsList() {
                 <PriorityBadge priority={t.priority} />
                 <SlaBar ticket={t} />
                 <span className="hidden text-muted-foreground lg:block">→</span>
+                <span />
               </Link>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setDeleteTarget({ id: t.id, code: t.code });
+                }}
+                title="Excluir ticket"
+                aria-label={`Excluir ticket ${t.code}`}
+                className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md p-1.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+              >
+                <Trash2 className="h-4 w-4" />
+              </button>
             </li>
           ))}
           {filtered.length === 0 && (
@@ -154,6 +196,30 @@ function TicketsList() {
           )}
         </ul>
       </div>
+
+      <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir ticket {deleteTarget?.code}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Essa ação é definitiva e remove o ticket, suas mensagens e histórico. Não é possível desfazer.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={deleting}
+              onClick={(e) => {
+                e.preventDefault();
+                void handleConfirmDelete();
+              }}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deleting ? "Excluindo..." : "Excluir"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

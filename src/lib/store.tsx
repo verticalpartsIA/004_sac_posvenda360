@@ -607,6 +607,7 @@ interface StoreCtx {
     data: { rootCause: RootCause; justification: string; report: string },
   ) => void;
   setNps: (id: string, score: number) => void;
+  deleteTicket: (id: string) => Promise<void>;
   createInternalTicket: (i: NewInternalTicketInput) => InternalTicket;
   respondInternalTicket: (id: string, text: string) => void;
   updateInternalStatus: (
@@ -924,6 +925,25 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     [loadAll, writeAudit],
   );
 
+  const deleteTicket = useCallback<StoreCtx["deleteTicket"]>(
+    async (id) => {
+      const ticket = tickets.find((t) => t.id === id);
+      const { error } = await ticketsRepo.remove(id);
+
+      if (error) {
+        console.error("[Store] Failed to delete ticket", error);
+        throw error;
+      }
+
+      setTickets((ts) => ts.filter((t) => t.id !== id));
+      await writeAudit("ticket", id, "ticket_deleted", {
+        detail: `Ticket ${ticket?.code ?? id} excluído por ${currentUser}`,
+      });
+      await loadAll();
+    },
+    [currentUser, loadAll, tickets, writeAudit],
+  );
+
   const createInternalTicket = useCallback<StoreCtx["createInternalTicket"]>(
     (input) => {
       const createdAt = now();
@@ -1182,6 +1202,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       assignTicket,
       resolveTicket,
       setNps,
+      deleteTicket,
       createInternalTicket,
       respondInternalTicket,
       updateInternalStatus,
@@ -1203,6 +1224,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       assignTicket,
       resolveTicket,
       setNps,
+      deleteTicket,
       createInternalTicket,
       respondInternalTicket,
       updateInternalStatus,

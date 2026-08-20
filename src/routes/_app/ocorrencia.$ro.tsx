@@ -1,5 +1,6 @@
 import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
 import { useState } from "react";
+import { toast } from "sonner";
 import { useStore, slaStatus } from "@/lib/store";
 import {
   ROOT_CAUSE_LABEL,
@@ -14,7 +15,18 @@ import {
 import { StatusBadge, PriorityBadge } from "@/components/app/StatusBadge";
 import { SlaBar } from "@/components/app/SlaBar";
 import { AssigneePicker } from "@/components/app/AssigneePicker";
-import { ArrowLeft, ShieldCheck, Clock, User, MessageCircle, FileEdit, Star, AlertTriangle, Users, Plus, RefreshCw, ImageIcon, X } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import { ArrowLeft, ShieldCheck, Clock, User, MessageCircle, FileEdit, Star, AlertTriangle, Users, Plus, RefreshCw, ImageIcon, X, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/_app/ocorrencia/$ro")({ component: TicketDetail });
@@ -22,7 +34,7 @@ export const Route = createFileRoute("/_app/ocorrencia/$ro")({ component: Ticket
 function TicketDetail() {
   const { ro } = Route.useParams();
   const router = useRouter();
-  const { tickets, internalTickets, storeReady, updateStatus, resolveTicket, setNps, createInternalTicket, assignTicket, teamMembers } = useStore();
+  const { tickets, internalTickets, storeReady, updateStatus, resolveTicket, setNps, createInternalTicket, assignTicket, teamMembers, deleteTicket } = useStore();
   const ticket = tickets.find((t) => t.code === ro || t.id === ro);
 
   const [resolving, setResolving] = useState(false);
@@ -32,6 +44,20 @@ function TicketDetail() {
   const [resolveErr, setResolveErr] = useState<string | null>(null);
   const [resolvePhotos, setResolvePhotos] = useState<{ name: string; url: string }[]>([]);
   const [openInternal, setOpenInternal] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  async function handleDelete() {
+    if (!ticket) return;
+    setDeleting(true);
+    try {
+      await deleteTicket(ticket.id);
+      toast.success(`Ticket ${ticket.code} excluído.`);
+      router.navigate({ to: "/ocorrencias" });
+    } catch {
+      toast.error("Não foi possível excluir o ticket. Tente novamente.");
+      setDeleting(false);
+    }
+  }
 
   if (!storeReady) {
     return (
@@ -79,6 +105,37 @@ function TicketDetail() {
         <Link to="/ocorrencias" className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground">
           <ArrowLeft className="h-4 w-4" /> Voltar para Ocorrências
         </Link>
+        <AlertDialog>
+          <AlertDialogTrigger asChild>
+            <button
+              type="button"
+              className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-sm text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+            >
+              <Trash2 className="h-4 w-4" /> Excluir ticket
+            </button>
+          </AlertDialogTrigger>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Excluir ticket {ticket.code}?</AlertDialogTitle>
+              <AlertDialogDescription>
+                Essa ação é definitiva e remove o ticket, suas mensagens e histórico. Não é possível desfazer.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={deleting}>Cancelar</AlertDialogCancel>
+              <AlertDialogAction
+                disabled={deleting}
+                onClick={(e) => {
+                  e.preventDefault();
+                  void handleDelete();
+                }}
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              >
+                {deleting ? "Excluindo..." : "Excluir"}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
 
       <div className="rounded-xl border bg-card p-6 shadow-[var(--shadow-elegant)]">

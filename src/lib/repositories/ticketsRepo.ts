@@ -13,3 +13,7 @@ export function insert(payload: TablesInsert<"tickets">) {
 export function update(id: string, patch: TablesUpdate<"tickets">) {
   return supabase.from("tickets").update(patch).eq("id", id);
 }
+
+export function remove(id: string) {
+  return supabase.from("tickets").delete().eq("id", id);
+}
