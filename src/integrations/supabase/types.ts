@@ -1344,6 +1344,13 @@ export type Database = {
         }
         Returns: boolean
       }
+      // Funções de trigger (RETURNS TRIGGER) — não são chamadas via RPC de verdade
+      // (rodam pelo próprio trigger, como definidor); listadas aqui só pra tipar as
+      // chamadas .rpc(...) do teste de integração RLS que confirma que anon/
+      // authenticated não conseguem invocá-las diretamente (ver #74).
+      notify_vpclick_interno: { Args: Record<PropertyKey, never>; Returns: unknown }
+      notify_vpclick_ticket: { Args: Record<PropertyKey, never>; Returns: unknown }
+      on_auth_user_created: { Args: Record<PropertyKey, never>; Returns: unknown }
     }
     Enums: {
       app_role: "operador" | "gestor" | "admin" | "qualidade"
