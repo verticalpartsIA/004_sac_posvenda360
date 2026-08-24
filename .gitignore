@@ -38,3 +38,4 @@ dist-ssr
 *.sln
 *.sw?
 deploy-pv360/
+supabase/.temp/

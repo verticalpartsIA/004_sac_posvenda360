@@ -1,8 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
+import * as auditLogRepo from "@/lib/repositories/auditLogRepo";
 import * as notasFiscaisRepo from "@/lib/repositories/notasFiscaisRepo";
+import { useAuth } from "@/lib/auth";
 import { cn } from "@/lib/utils";
-import { Package, Clock, CheckCircle2, AlertTriangle, RefreshCw, ExternalLink, Search, X, CheckCircle, XCircle, History } from "lucide-react";
+import { Package, Clock, CheckCircle2, AlertTriangle, RefreshCw, ExternalLink, Search, X, CheckCircle, XCircle, History, Trash2 } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/_app/sac/")({
@@ -52,11 +54,17 @@ function fmt(valor: number) {
 }
 
 export default function SacPipeline() {
+  const { user } = useAuth();
   const [nfs, setNfs] = useState<SacNF[]>([]);
   const [loading, setLoading] = useState(true);
   const [filtroStatus, setFiltroStatus] = useState<string>("TODOS");
   const [filtroAbc, setFiltroAbc] = useState<string>("TODOS");
   const [busca, setBusca] = useState("");
+  const [selecionadas, setSelecionadas] = useState<string[]>([]);
+  const [modalRetiradaAberto, setModalRetiradaAberto] = useState(false);
+  const [justificativaRetirada, setJustificativaRetirada] = useState("");
+  const [erroRetirada, setErroRetirada] = useState("");
+  const [retirando, setRetirando] = useState(false);
 
   async function carregar(sincronizarFaturamento = false) {
     setLoading(true);
@@ -70,6 +78,7 @@ export default function SacPipeline() {
     // qualquer pendência mais antiga que as 200 NFs mais recentes.
     const { data } = await notasFiscaisRepo.listPendentes();
     setNfs((data as SacNF[]) ?? []);
+    setSelecionadas([]);
     setLoading(false);
   }
 
@@ -95,6 +104,82 @@ export default function SacPipeline() {
     ENTREGUE: nfs.filter((n) => n.status_entrega === "ENTREGUE").length,
     ATRASADA: nfs.filter((n) => n.status_entrega === "ATRASADA").length,
   };
+
+  const idsFiltradas = filtradas.map((nf) => nf.id);
+  const todasVisiveisSelecionadas = idsFiltradas.length > 0 && idsFiltradas.every((id) => selecionadas.includes(id));
+  const selecionadasDetalhe = nfs.filter((nf) => selecionadas.includes(nf.id));
+
+  function toggleSelecionada(id: string) {
+    setSelecionadas((atuais) => atuais.includes(id) ? atuais.filter((item) => item !== id) : [...atuais, id]);
+  }
+
+  function toggleTodasVisiveis() {
+    setSelecionadas((atuais) => {
+      if (todasVisiveisSelecionadas) return atuais.filter((id) => !idsFiltradas.includes(id));
+      return Array.from(new Set([...atuais, ...idsFiltradas]));
+    });
+  }
+
+  function abrirRetirada() {
+    setErroRetirada("");
+    setJustificativaRetirada("");
+    setModalRetiradaAberto(true);
+  }
+
+  function fecharRetirada() {
+    if (retirando) return;
+    setModalRetiradaAberto(false);
+    setErroRetirada("");
+    setJustificativaRetirada("");
+  }
+
+  async function confirmarRetirada() {
+    const motivo = justificativaRetirada.trim();
+    if (selecionadas.length === 0) return;
+    if (motivo.length < 10) {
+      setErroRetirada("Informe uma justificativa com pelo menos 10 caracteres.");
+      return;
+    }
+
+    setRetirando(true);
+    setErroRetirada("");
+    const agora = new Date().toISOString();
+    const actorName = (user?.user_metadata?.display_name as string | undefined) ?? user?.email ?? "Usuário";
+    const { error } = await notasFiscaisRepo.retirarDaFila(selecionadas, {
+      sac_retirado: true,
+      sac_retirado_em: agora,
+      sac_retirado_por: user?.id ?? null,
+      sac_retirado_por_nome: actorName,
+      sac_retirado_justificativa: motivo,
+      updated_at: agora,
+    });
+
+    if (error) {
+      setErroRetirada("Não foi possível retirar as linhas selecionadas. Tente novamente.");
+      setRetirando(false);
+      return;
+    }
+
+    await Promise.all(selecionadasDetalhe.map((nf) => auditLogRepo.registrar({
+      entity_type: "sac_nf",
+      entity_id: nf.id,
+      action: "sac_retirado_da_fila",
+      actor_id: user?.id ?? null,
+      actor_name: actorName,
+      payload: {
+        justificativa: motivo,
+        nf_numero: nf.nf_numero,
+        numero_pedido_omie: nf.numero_pedido_omie,
+        cliente: nf.razao_social_cliente,
+      },
+    })));
+
+    setNfs((atuais) => atuais.filter((nf) => !selecionadas.includes(nf.id)));
+    setSelecionadas([]);
+    setModalRetiradaAberto(false);
+    setJustificativaRetirada("");
+    setRetirando(false);
+  }
 
   return (
     <div className="space-y-6">
@@ -169,6 +254,19 @@ export default function SacPipeline() {
         <span className="ml-auto text-xs text-muted-foreground">{filtradas.length} registro(s)</span>
       </div>
 
+      {selecionadas.length > 0 && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+          <span className="font-medium">{selecionadas.length} linha(s) selecionada(s)</span>
+          <button
+            type="button"
+            onClick={abrirRetirada}
+            className="inline-flex items-center gap-2 rounded-lg border border-amber-700 bg-background px-3 py-2 text-xs font-semibold text-amber-900 hover:bg-amber-100"
+          >
+            <Trash2 className="h-4 w-4" /> Remover do SAC
+          </button>
+        </div>
+      )}
+
       {/* Tabela */}
       <div className="rounded-xl border bg-card overflow-hidden">
         {loading ? (
@@ -183,6 +281,15 @@ export default function SacPipeline() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b bg-muted/30 text-xs font-medium text-muted-foreground">
+                <th className="w-10 px-4 py-3 text-center">
+                  <input
+                    type="checkbox"
+                    aria-label="Selecionar todas as linhas visíveis"
+                    checked={todasVisiveisSelecionadas}
+                    onChange={toggleTodasVisiveis}
+                    className="h-4 w-4 rounded border-border accent-gold"
+                  />
+                </th>
                 <th className="px-4 py-3 text-left">NF</th>
                 <th className="px-4 py-3 text-left">Pedido</th>
                 <th className="px-4 py-3 text-left">Cliente</th>
@@ -200,8 +307,18 @@ export default function SacPipeline() {
               {filtradas.map((nf) => {
                 const cfg = STATUS_CONFIG[nf.status_entrega];
                 const Icon = cfg.icon;
+                const selecionada = selecionadas.includes(nf.id);
                 return (
-                  <tr key={nf.id} className="border-b last:border-0 hover:bg-muted/20 transition-colors">
+                  <tr key={nf.id} className={cn("border-b last:border-0 hover:bg-muted/20 transition-colors", selecionada && "bg-amber-50/50")}>
+                    <td className="px-4 py-3 text-center">
+                      <input
+                        type="checkbox"
+                        aria-label={`Selecionar NF ${nf.nf_numero}`}
+                        checked={selecionada}
+                        onChange={() => toggleSelecionada(nf.id)}
+                        className="h-4 w-4 rounded border-border accent-gold"
+                      />
+                    </td>
                     <td className="px-4 py-3">
                       {/* Sem chave NFe e com nf_numero igual ao pedido = placeholder da
                           ingestão (o número real chega via sync-faturamento) — não
@@ -264,6 +381,55 @@ export default function SacPipeline() {
           </table>
         )}
       </div>
+
+      {modalRetiradaAberto && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-lg rounded-xl border bg-background p-5 shadow-xl">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h2 className="text-lg font-semibold">Remover linhas do SAC</h2>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  As linhas sairão desta fila, mas continuarão registradas no histórico.
+                </p>
+              </div>
+              <button type="button" onClick={fecharRetirada} className="rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="mt-4 rounded-lg border bg-muted/20 p-3 text-xs text-muted-foreground">
+              {selecionadas.length} linha(s) selecionada(s)
+            </div>
+
+            <label className="mt-4 block">
+              <span className="text-xs font-semibold uppercase text-muted-foreground">Justificativa *</span>
+              <textarea
+                value={justificativaRetirada}
+                onChange={(e) => setJustificativaRetirada(e.target.value)}
+                rows={4}
+                className="mt-1.5 w-full rounded-lg border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+                placeholder="Explique por que essas linhas devem sair da fila SAC..."
+              />
+            </label>
+
+            {erroRetirada && <p className="mt-2 text-sm text-destructive">{erroRetirada}</p>}
+
+            <div className="mt-5 flex justify-end gap-2">
+              <button type="button" onClick={fecharRetirada} disabled={retirando} className="rounded-lg border px-4 py-2 text-sm hover:bg-muted disabled:opacity-60">
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={confirmarRetirada}
+                disabled={retirando}
+                className="inline-flex items-center gap-2 rounded-lg border border-amber-700 bg-amber-500 px-4 py-2 text-sm font-semibold text-black hover:bg-amber-400 disabled:opacity-60"
+              >
+                <Trash2 className="h-4 w-4" /> {retirando ? "Removendo..." : "Confirmar remoção"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

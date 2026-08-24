@@ -138,14 +138,23 @@ describe("notasFiscaisRepo", () => {
     expect(ops[1]).toEqual(["eq", ["id", "nf-1"]]);
   });
 
-  it("listPendentes filtra Entrega e/ou SAC não concluídos, mais recentes primeiro, até 1000", () => {
+  it("retirarDaFila atualiza várias NFs pelo id", () => {
+    notasFiscaisRepo.retirarDaFila(["nf-1", "nf-2"], { sac_retirado: true });
+    const [{ table, ops }] = fromCalls;
+    expect(table).toBe("sac_notas_fiscais");
+    expect(ops[0]).toEqual(["update", [{ sac_retirado: true }]]);
+    expect(ops[1]).toEqual(["in", ["id", ["nf-1", "nf-2"]]]);
+  });
+
+  it("listPendentes filtra retiradas, Entrega e/ou SAC não concluídos, mais recentes primeiro, até 1000", () => {
     notasFiscaisRepo.listPendentes();
     const [{ table, ops }] = fromCalls;
     expect(table).toBe("sac_notas_fiscais");
     expect(ops[0][0]).toBe("select");
-    expect(ops[1]).toEqual(["or", ["status_entrega.neq.ENTREGUE,status_pos_venda.neq.CONCLUIDO"]]);
-    expect(ops[2]).toEqual(["order", ["data_emissao", { ascending: false }]]);
-    expect(ops[3]).toEqual(["limit", [1000]]);
+    expect(ops[1]).toEqual(["or", ["sac_retirado.is.null,sac_retirado.eq.false"]]);
+    expect(ops[2]).toEqual(["or", ["status_entrega.neq.ENTREGUE,status_pos_venda.neq.CONCLUIDO"]]);
+    expect(ops[3]).toEqual(["order", ["data_emissao", { ascending: false }]]);
+    expect(ops[4]).toEqual(["limit", [1000]]);
   });
 
   it("listConcluidas filtra Entrega ENTREGUE e SAC CONCLUIDO", () => {

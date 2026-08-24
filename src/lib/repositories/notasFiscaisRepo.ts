@@ -17,6 +17,10 @@ export function update(nfId: string, patch: TablesUpdate<"sac_notas_fiscais">) {
   return supabase.from("sac_notas_fiscais").update(patch).eq("id", nfId);
 }
 
+export function retirarDaFila(nfIds: string[], patch: TablesUpdate<"sac_notas_fiscais">) {
+  return supabase.from("sac_notas_fiscais").update(patch).in("id", nfIds);
+}
+
 const CAMPOS_PENDENTES =
   "id,nf_numero,chave_nfe,numero_pedido_omie,razao_social_cliente,classe_abc,valor_total,data_emissao,previsao_entrega,status_entrega,status_pos_venda,transportadora,codigo_rastreio,pesquisa_enviada,faturado,data_faturamento";
 
@@ -25,6 +29,7 @@ export function listPendentes() {
   return supabase
     .from("sac_notas_fiscais")
     .select(CAMPOS_PENDENTES)
+    .or("sac_retirado.is.null,sac_retirado.eq.false")
     .or("status_entrega.neq.ENTREGUE,status_pos_venda.neq.CONCLUIDO")
     .order("data_emissao", { ascending: false })
     .limit(1000);

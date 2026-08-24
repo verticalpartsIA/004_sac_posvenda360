@@ -830,6 +830,11 @@ export type Database = {
           razao_social_cliente: string | null
           responsavel_pos_venda: string | null
           retirado_por: string | null
+          sac_retirado: boolean
+          sac_retirado_em: string | null
+          sac_retirado_justificativa: string | null
+          sac_retirado_por: string | null
+          sac_retirado_por_nome: string | null
           status_entrega: string
           status_pos_venda: string | null
           tipo_entrega: string | null
@@ -868,6 +873,11 @@ export type Database = {
           razao_social_cliente?: string | null
           responsavel_pos_venda?: string | null
           retirado_por?: string | null
+          sac_retirado?: boolean
+          sac_retirado_em?: string | null
+          sac_retirado_justificativa?: string | null
+          sac_retirado_por?: string | null
+          sac_retirado_por_nome?: string | null
           status_entrega?: string
           status_pos_venda?: string | null
           tipo_entrega?: string | null
@@ -906,6 +916,11 @@ export type Database = {
           razao_social_cliente?: string | null
           responsavel_pos_venda?: string | null
           retirado_por?: string | null
+          sac_retirado?: boolean
+          sac_retirado_em?: string | null
+          sac_retirado_justificativa?: string | null
+          sac_retirado_por?: string | null
+          sac_retirado_por_nome?: string | null
           status_entrega?: string
           status_pos_venda?: string | null
           tipo_entrega?: string | null
